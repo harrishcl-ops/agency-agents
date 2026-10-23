@@ -89,19 +89,19 @@ function fitMain(parentSize: number, starts: number[], sizes: number[]): AxisFit
     return out;
   };
 
-  const symmetric = Math.min(lead, trail);
+  const symmetricPad = Math.min(lead, trail);
   const fits: AxisFit[] = [
-    { align: "MIN", padStart: lead, padEnd: symmetric, gap, error: err(flow(lead, gap)) },
+    { align: "MIN", padStart: lead, padEnd: symmetricPad, gap, error: err(flow(lead, gap)) },
     {
       align: "CENTER",
-      padStart: symmetric,
-      padEnd: symmetric,
+      padStart: symmetricPad,
+      padEnd: symmetricPad,
       gap,
       error: err(flow((parentSize - total - gap * (n - 1)) / 2, gap)),
     },
     {
       align: "MAX",
-      padStart: symmetric,
+      padStart: symmetricPad,
       padEnd: trail,
       gap,
       error: err(flow(parentSize - trail - total - gap * (n - 1), gap)),
@@ -113,10 +113,14 @@ function fitMain(parentSize: number, starts: number[], sizes: number[]): AxisFit
       fits.push({ align: "SPACE_BETWEEN", padStart: lead, padEnd: trail, gap, error: err(flow(lead, between)) });
     }
   }
-  // Prefer the simplest alignment unless another is clearly better.
-  let best = fits[0];
-  for (const f of fits) if (f.error < best.error - 0.5) best = f;
-  return best;
+  // Among near-equal fits prefer the most "designerly" alignment: space-between
+  // for widely spread items, centre for symmetric content, then start/end.
+  const min = Math.min(...fits.map((f) => f.error));
+  const near = fits.filter((f) => f.error <= min + 0.5);
+  const pick = (a: PrimaryAlign) => near.find((f) => f.align === a);
+  const spread = n >= 2 && gap > parentSize * 0.25;
+  const symmetric = Math.abs(lead - trail) <= 1;
+  return (spread && pick("SPACE_BETWEEN")) || (symmetric && pick("CENTER")) || pick("MIN") || pick("MAX") || near[0];
 }
 
 interface CounterFit {
@@ -131,7 +135,7 @@ function fitCounter(parentSize: number, starts: number[], sizes: number[]): Coun
   const after = starts.map((s, i) => parentSize - s - sizes[i]);
   const minBefore = Math.max(0, Math.min(...before));
   const minAfter = Math.max(0, Math.min(...after));
-  const symmetric = Math.min(minBefore, minAfter);
+  const symmetricPad = Math.min(minBefore, minAfter);
   const fits: CounterFit[] = [
     {
       align: "MIN",
@@ -141,8 +145,8 @@ function fitCounter(parentSize: number, starts: number[], sizes: number[]): Coun
     },
     {
       align: "CENTER",
-      padStart: symmetric,
-      padEnd: symmetric,
+      padStart: symmetricPad,
+      padEnd: symmetricPad,
       error: Math.max(...starts.map((s, i) => Math.abs(s - (parentSize - sizes[i]) / 2))),
     },
     {
@@ -152,9 +156,13 @@ function fitCounter(parentSize: number, starts: number[], sizes: number[]): Coun
       error: Math.max(...after.map((a) => Math.abs(a - minAfter))),
     },
   ];
-  let best = fits[0];
-  for (const f of fits) if (f.error < best.error - 0.5) best = f;
-  return best;
+  const min = Math.min(...fits.map((f) => f.error));
+  const near = fits.filter((f) => f.error <= min + 0.5);
+  const pick = (a: CounterAlign) => near.find((f) => f.align === a);
+  // Centre when it is visible: one child, or children of different sizes.
+  const varied = sizes.length === 1 || Math.max(...sizes) - Math.min(...sizes) > 1;
+  const symmetric = Math.abs(minBefore - minAfter) <= 1;
+  return (symmetric && varied && pick("CENTER")) || pick("MIN") || pick("MAX") || near[0];
 }
 
 /**

@@ -310,7 +310,7 @@ export class Pipeline {
         this.check();
         const regions = this.verifyRegions(best.analysis)
           .map((r) => ({ ...r, diff: diffImages(this.px, rendered, r.rect) }))
-          .filter((r) => r.diff.mismatch > 0.015);
+          .filter((r) => r.diff.badCells > 0 || r.diff.mismatch > 0.02);
         if (regions.length === 0) break;
 
         host.status(`Checking against the original (round ${round}/${opts.maxRounds})…`, 0.55 + (0.4 * (round - 1)) / opts.maxRounds);

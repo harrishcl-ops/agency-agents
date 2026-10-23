@@ -1,0 +1,34 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><style>
+body { width: 1280px; height: 800px; background: #0B1120; color: #E2E8F0; overflow: hidden; display: flex; }
+aside { width: 240px; height: 800px; background: #111827; border-right: 1px solid #1F2937; padding: 24px 16px; display: flex; flex-direction: column; gap: 6px; }
+.brand { font-size: 18px; font-weight: 700; color: #FFFFFF; padding: 0 12px 20px; }
+.item { padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 500; color: #94A3B8; }
+.item.on { background: #1E293B; color: #FFFFFF; }
+main { flex: 1; padding: 28px 32px; }
+.top { display: flex; justify-content: space-between; align-items: center; }
+h3 { font-size: 24px; font-weight: 700; color: #FFFFFF; }
+.range { border: 1px solid #334155; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #CBD5E1; }
+.kpis { display: flex; gap: 16px; margin-top: 24px; }
+.kpi { flex: 1; background: #111827; border: 1px solid #1F2937; border-radius: 14px; padding: 18px 20px; }
+.kl { font-size: 13px; color: #94A3B8; }
+.kv { font-size: 30px; font-weight: 700; color: #FFFFFF; margin-top: 8px; }
+.kd { font-size: 13px; font-weight: 600; color: #34D399; margin-top: 6px; }
+.kd.down { color: #F87171; }
+.chart { margin-top: 16px; background: #111827; border: 1px solid #1F2937; border-radius: 14px; padding: 20px; height: 420px; }
+.ct { font-size: 15px; font-weight: 600; color: #FFFFFF; }
+.bars { display: flex; align-items: flex-end; gap: 18px; height: 300px; margin-top: 36px; padding: 0 8px; }
+.bar { width: 44px; border-radius: 6px 6px 0 0; background: linear-gradient(180deg, #818CF8 0%, #4F46E5 100%); }
+</style></head><body>
+<aside><div class="brand">Atlas Analytics</div><div class="item on">Overview</div><div class="item">Revenue</div><div class="item">Customers</div><div class="item">Reports</div><div class="item">Settings</div></aside>
+<main>
+  <div class="top"><h3>Overview</h3><div class="range"><span>Last 30 days</span></div></div>
+  <div class="kpis">
+    <div class="kpi"><div class="kl">Revenue</div><div class="kv">AED 482k</div><div class="kd">+12.4%</div></div>
+    <div class="kpi"><div class="kl">New customers</div><div class="kv">1,284</div><div class="kd">+8.1%</div></div>
+    <div class="kpi"><div class="kl">Churn</div><div class="kv">2.3%</div><div class="kd down">-0.4%</div></div>
+  </div>
+  <div class="chart"><div class="ct">Monthly revenue</div>
+    <div class="bars"><div class="bar" style="height:42%"></div><div class="bar" style="height:58%"></div><div class="bar" style="height:51%"></div><div class="bar" style="height:66%"></div><div class="bar" style="height:72%"></div><div class="bar" style="height:63%"></div><div class="bar" style="height:80%"></div><div class="bar" style="height:77%"></div><div class="bar" style="height:88%"></div><div class="bar" style="height:84%"></div><div class="bar" style="height:93%"></div><div class="bar" style="height:100%"></div></div>
+  </div>
+</main>
+</body></html>

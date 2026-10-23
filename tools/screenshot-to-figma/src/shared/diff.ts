@@ -5,9 +5,17 @@
 import type { Pixels } from "./color";
 import type { Rect } from "./types";
 
+const CELL = 12;
+const CELL_THRESHOLD = 0.5;
+
 export interface DiffResult {
   /** Fraction of compared pixels that mismatch (0..1). */
   mismatch: number;
+  /**
+   * Number of CELL x CELL blocks where most pixels mismatch: real missing or
+   * misplaced elements, as opposed to anti-aliasing fringes along glyph edges.
+   */
+  badCells: number;
   /** Original dimmed to grey, mismatched pixels painted red. Same size as `region`. */
   mask: Pixels;
 }
@@ -41,6 +49,8 @@ export function diffImages(original: Pixels, rendered: Pixels, region?: Rect, th
   const mask: Pixels = { data: new Uint8ClampedArray(w * h * 4), width: w, height: h };
   const t2 = threshold * threshold;
   let bad = 0;
+  const cols = Math.ceil(w / CELL);
+  const cells = new Uint16Array(cols * Math.ceil(h / CELL));
 
   for (let y = y0; y < y1; y++) {
     for (let x = x0; x < x1; x++) {
@@ -53,6 +63,7 @@ export function diffImages(original: Pixels, rendered: Pixels, region?: Rect, th
         mask.data[m] = mask.data[m + 1] = mask.data[m + 2] = Math.min(255, g);
       } else {
         bad++;
+        cells[Math.floor((y - y0) / CELL) * cols + Math.floor((x - x0) / CELL)]++;
         mask.data[m] = 255;
         mask.data[m + 1] = 0;
         mask.data[m + 2] = 0;
@@ -60,5 +71,11 @@ export function diffImages(original: Pixels, rendered: Pixels, region?: Rect, th
       mask.data[m + 3] = 255;
     }
   }
-  return { mismatch: w * h > 0 ? bad / (w * h) : 0, mask };
+  let badCells = 0;
+  cells.forEach((count, i) => {
+    const cw = Math.min(CELL, w - (i % cols) * CELL);
+    const ch = Math.min(CELL, h - Math.floor(i / cols) * CELL);
+    if (count > cw * ch * CELL_THRESHOLD) badCells++;
+  });
+  return { mismatch: w * h > 0 ? bad / (w * h) : 0, badCells, mask };
 }

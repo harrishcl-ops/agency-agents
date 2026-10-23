@@ -4,7 +4,7 @@
 // (pixels that differ from the background behind them). Text boxes become
 // glyph bounds, which the renderer aligns using Figma's render bounds.
 
-import { dominantColor, hexToRgba, type Pixels } from "./color";
+import { hexToRgba, surroundingColor, type Pixels } from "./color";
 import type { Analysis, FlatNode, Rect } from "./types";
 
 type RGB = [number, number, number];
@@ -55,9 +55,12 @@ function findEdge(px: Pixels, r: Rect, side: Side, band: number, isInside: (c: R
     const t = origin + length * (0.5 - spread + (2 * spread * (k + 0.5)) / lines);
     // Walk from inside to outside; the edge is where pixels stop belonging.
     let last: number | null = null;
+    const limit = horizontal ? px.width : px.height;
     for (let d = -band; d <= band; d++) {
-      const p = edge + outward * d;
-      const c = horizontal ? at(px, p - (outward > 0 ? 1 : 0), t) : at(px, t, p - (outward > 0 ? 1 : 0));
+      const p = Math.round(edge + outward * d);
+      const q = p - (outward > 0 ? 1 : 0); // pixel just inside boundary p
+      if (q < 0 || q >= limit) break; // the image border is the edge
+      const c = horizontal ? at(px, q, t) : at(px, t, q);
       if (isInside(c)) last = p;
       else if (last !== null) break;
     }
@@ -124,9 +127,9 @@ export function inkBox(px: Pixels, r: Rect, bg: RGB, clip: Rect, threshold = 40)
   const y1 = Math.min(px.height, Math.ceil(Math.min(clip.y + clip.h, r.y + r.h + band)));
   if (x1 - x0 < 1 || y1 - y0 < 1) return null;
 
-  // Local background: the most common colour in the search window.
-  const local = dominantColor(px, { x: x0, y: y0, w: x1 - x0, h: y1 - y0 });
-  const ref = local && local.share > 0.35 ? local.rgb : bg;
+  // Local background: the dominant colour around the box.
+  const around = surroundingColor(px, r);
+  const ref = around && around.share > 0.5 ? around.rgb : bg;
 
   const cols = new Array(x1 - x0).fill(0);
   const rows = new Array(y1 - y0).fill(0);

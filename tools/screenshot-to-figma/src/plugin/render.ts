@@ -120,8 +120,9 @@ export class Renderer {
   };
   private fonts!: FontResolver;
 
+  /** Image bytes per node id, or an existing Figma image hash. */
   constructor(
-    private images: Record<string, Uint8Array>,
+    private images: Record<string, Uint8Array | string>,
     private options: RenderOptions,
   ) {}
 
@@ -337,8 +338,8 @@ export class Renderer {
     applyBox(shape, { ...node, fill: null, gradient: null });
     const bytes = this.images[node.id];
     if (bytes && bytes.length > 0) {
-      const image = figma.createImage(bytes);
-      shape.fills = [{ type: "IMAGE", imageHash: image.hash, scaleMode: "FILL" }];
+      const imageHash = typeof bytes === "string" ? bytes : figma.createImage(bytes).hash;
+      shape.fills = [{ type: "IMAGE", imageHash, scaleMode: "FILL" }];
       this.stats.images++;
     } else {
       shape.fills = [solid("#E5E7EB")];

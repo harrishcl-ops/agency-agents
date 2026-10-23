@@ -90,6 +90,17 @@ export function dominantColor(
   return { hex: rgbToHex(...rgb), rgb, share: best.n / samples.length };
 }
 
+/**
+ * Background around `rect`: the dominant colour of a ring just outside it
+ * (glyphs can cover most of a tight text box, so its inside is unreliable).
+ */
+export function surroundingColor(px: Pixels, rect: Rect): { rgb: RGB; share: number } | null {
+  const pad = Math.max(4, Math.round(Math.min(rect.w, rect.h) * 0.5));
+  const ring: Rect = { x: rect.x - pad, y: rect.y - pad, w: rect.w + 2 * pad, h: rect.h + 2 * pad };
+  const d = dominantColor(px, ring, [rect], 600);
+  return d ? { rgb: d.rgb, share: d.share } : null;
+}
+
 const dist = (a: RGB, b: RGB) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 
 /**
@@ -99,9 +110,8 @@ const dist = (a: RGB, b: RGB) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2
 export function textInkColor(px: Pixels, rect: Rect, background?: RGB): string | null {
   const samples = sample(px, rect, [], 2500);
   if (samples.length < 4) return null;
-  // Glyphs rarely cover most of their box, so the local mode is the background.
-  const local = dominantColor(px, rect);
-  const bg = local && local.share > 0.4 ? local.rgb : background ?? local?.rgb;
+  const around = surroundingColor(px, rect);
+  const bg = around && around.share > 0.5 ? around.rgb : background ?? around?.rgb;
   if (!bg) return null;
   const scored = samples
     .map((c) => ({ c, d: dist(c, bg) }))

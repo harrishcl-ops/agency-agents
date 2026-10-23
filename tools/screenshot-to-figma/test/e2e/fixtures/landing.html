@@ -1,0 +1,42 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><style>
+body { width: 1440px; height: 900px; background: #F8FAFC; color: #0F172A; overflow: hidden; }
+nav { height: 72px; padding: 0 64px; display: flex; align-items: center; justify-content: space-between; background: #FFFFFF; border-bottom: 1px solid #E2E8F0; }
+.logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 20px; }
+.mark { width: 32px; height: 32px; border-radius: 8px; background: #4F46E5; }
+.links { display: flex; gap: 36px; font-size: 15px; font-weight: 500; color: #475569; }
+.cta { background: #0F172A; color: #FFFFFF; font-size: 14px; font-weight: 600; padding: 11px 20px; border-radius: 10px; }
+.hero { display: flex; gap: 64px; padding: 88px 64px 0; }
+.copy { width: 600px; padding-top: 24px; }
+.badge { display: inline-block; background: #EEF2FF; color: #4338CA; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; }
+h1 { font-size: 56px; line-height: 64px; font-weight: 700; letter-spacing: -1.5px; margin-top: 20px; }
+p.lead { font-size: 18px; line-height: 28px; color: #475569; margin-top: 20px; width: 540px; }
+.buttons { display: flex; gap: 12px; margin-top: 32px; }
+.primary { background: #4F46E5; color: #FFFFFF; font-weight: 600; font-size: 16px; padding: 14px 24px; border-radius: 12px; }
+.secondary { background: #FFFFFF; color: #0F172A; font-weight: 600; font-size: 16px; padding: 13px 23px; border-radius: 12px; border: 1px solid #CBD5E1; }
+.visual { width: 648px; height: 460px; border-radius: 20px; overflow: hidden; box-shadow: 0 20px 40px rgba(15,23,42,0.15); }
+.visual canvas { width: 648px; height: 460px; display: block; }
+.stats { display: flex; gap: 48px; margin-top: 48px; }
+.stat .n { font-size: 28px; font-weight: 700; }
+.stat .l { font-size: 14px; color: #64748B; margin-top: 4px; }
+</style></head><body>
+<nav>
+  <div class="logo"><div class="mark"></div><span>Northwind</span></div>
+  <div class="links"><span>Product</span><span>Solutions</span><span>Pricing</span><span>Customers</span></div>
+  <div class="cta"><span>Start free trial</span></div>
+</nav>
+<section class="hero">
+  <div class="copy">
+    <div class="badge"><span>New · AI scheduling</span></div>
+    <h1>Plan every project in half the time</h1>
+    <p class="lead">Northwind brings your roadmap, tasks and team capacity into one calm workspace, so launches ship on schedule.</p>
+    <div class="buttons"><div class="primary"><span>Get started</span></div><div class="secondary"><span>Book a demo</span></div></div>
+    <div class="stats">
+      <div class="stat"><div class="n">12k+</div><div class="l">Teams onboard</div></div>
+      <div class="stat"><div class="n">4.9/5</div><div class="l">Average rating</div></div>
+      <div class="stat"><div class="n">38%</div><div class="l">Faster delivery</div></div>
+    </div>
+  </div>
+  <div class="visual"><canvas data-photo="7"></canvas></div>
+</section>
+<script src="photo.js"></script>
+</body></html>
