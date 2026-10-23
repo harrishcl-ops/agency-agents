@@ -1,0 +1,14 @@
+{
+  "name": "Screen2Figma",
+  "id": "screen2figma-local-dev",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "networkAccess": {
+    "allowedDomains": ["https://api.anthropic.com"],
+    "devAllowedDomains": ["http://localhost:8787"],
+    "reasoning": "Sends the screenshot to the Anthropic API (or your own Screen2Figma server) to analyse its layout."
+  }
+}

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<style>
+  :root {
+    --bg: var(--figma-color-bg, #ffffff);
+    --bg2: var(--figma-color-bg-secondary, #f5f5f5);
+    --text: var(--figma-color-text, #1e1e1e);
+    --muted: var(--figma-color-text-secondary, #6b6b6b);
+    --border: var(--figma-color-border, #e3e3e3);
+    --brand: var(--figma-color-bg-brand, #0d99ff);
+    --brand-text: var(--figma-color-text-onbrand, #ffffff);
+    --danger: var(--figma-color-text-danger, #e5484d);
+    --ok: var(--figma-color-text-success, #14ae5c);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 12px/1.45 Inter, system-ui, -apple-system, sans-serif; color: var(--text); background: var(--bg); }
+  main { padding: 14px; display: grid; gap: 12px; }
+  h1 { font-size: 13px; margin: 0; font-weight: 600; }
+  .sub { color: var(--muted); margin-top: 2px; }
+  #drop { border: 1.5px dashed var(--border); border-radius: 8px; min-height: 150px; display: grid; place-items: center; text-align: center; padding: 12px; cursor: pointer; background: var(--bg2); position: relative; overflow: hidden; }
+  #drop.over { border-color: var(--brand); }
+  #drop img { max-width: 100%; max-height: 220px; border-radius: 4px; display: block; }
+  #drop .hint { color: var(--muted); }
+  #drop .hint b { color: var(--text); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row > * { flex: 1; }
+  label.field { display: grid; gap: 4px; color: var(--muted); }
+  select, input[type=text], input[type=password], input[type=number] { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+  .check { display: flex; gap: 6px; align-items: center; }
+  button { font: inherit; border-radius: 6px; padding: 8px 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--brand); color: var(--brand-text); border-color: transparent; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  details { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  details[open] { display: grid; gap: 8px; }
+  summary { cursor: pointer; font-weight: 600; }
+  .progress { height: 4px; background: var(--bg2); border-radius: 2px; overflow: hidden; }
+  .progress > div { height: 100%; width: 0; background: var(--brand); transition: width .3s; }
+  #status { color: var(--muted); min-height: 18px; }
+  #status.error { color: var(--danger); }
+  #result { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: none; gap: 6px; }
+  #result.show { display: grid; }
+  .score { font-size: 20px; font-weight: 700; color: var(--ok); }
+  .muted { color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <div>
+    <h1>Screen2Figma</h1>
+    <div class="sub">Screenshot → editable, auto-layout Figma design</div>
+  </div>
+
+  <div id="drop" tabindex="0">
+    <div class="hint" id="dropHint"><b>Drop, paste (⌘/Ctrl+V) or click</b><br />PNG · JPEG · WebP · GIF · BMP · AVIF · SVG</div>
+    <img id="preview" alt="" hidden />
+  </div>
+  <input id="file" type="file" accept="image/*,.svg" hidden />
+  <div class="row">
+    <button id="useSelection">Use selected layer</button>
+    <button id="clear" disabled>Clear</button>
+  </div>
+
+  <div class="row">
+    <label class="field">Quality
+      <select id="quality">
+        <option value="pixel-perfect">Pixel-perfect (slow)</option>
+        <option value="fast">Fast (one pass)</option>
+      </select>
+    </label>
+    <label class="field">Platform
+      <select id="platform">
+        <option value="auto">Auto</option>
+        <option value="web">Web</option>
+        <option value="mobile">Mobile</option>
+        <option value="tablet">Tablet</option>
+      </select>
+    </label>
+  </div>
+  <div class="row">
+    <label class="field">Screenshot scale
+      <select id="pixelRatio">
+        <option value="0">Auto-detect</option>
+        <option value="1">1x</option>
+        <option value="2">2x (Retina)</option>
+        <option value="3">3x</option>
+      </select>
+    </label>
+    <label class="field">Icons
+      <select id="iconMode">
+        <option value="image">Exact (image)</option>
+        <option value="vector">Vector (AI redraw)</option>
+      </select>
+    </label>
+  </div>
+  <label class="check"><input id="autoLayout" type="checkbox" checked /> Use auto layout where it matches</label>
+  <label class="check"><input id="addReference" type="checkbox" checked /> Place original screenshot beside the result</label>
+
+  <details id="settings">
+    <summary>Connection &amp; model</summary>
+    <label class="field">Connection
+      <select id="mode">
+        <option value="direct">Anthropic API key (this computer)</option>
+        <option value="server">Screen2Figma server</option>
+      </select>
+    </label>
+    <label class="field" id="keyField">Anthropic API key
+      <input id="apiKey" type="password" placeholder="sk-ant-..." autocomplete="off" />
+    </label>
+    <div id="serverFields" hidden>
+      <label class="field">Server URL<input id="serverUrl" type="text" placeholder="https://s2f.example.com" /></label>
+      <label class="field">Access token<input id="serverToken" type="password" autocomplete="off" /></label>
+    </div>
+    <label class="field">Model
+      <select id="model"></select>
+    </label>
+    <div class="row">
+      <label class="field">Effort
+        <select id="effort">
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="xhigh">Extra high</option>
+          <option value="max">Max</option>
+        </select>
+      </label>
+      <label class="field">Correction rounds
+        <input id="maxRounds" type="number" min="0" max="8" />
+      </label>
+    </div>
+    <div class="muted">Your key is stored only in this Figma client (clientStorage).</div>
+  </details>
+
+  <button id="convert" class="primary" disabled>Convert to Figma design</button>
+  <button id="cancel" hidden>Cancel</button>
+  <div class="progress"><div id="bar"></div></div>
+  <div id="status"></div>
+
+  <div id="result">
+    <div class="muted">Visual match with the original</div>
+    <div class="score" id="score"></div>
+    <div id="resultDetail" class="muted"></div>
+  </div>
+</main>
+<script>/*__UI_SCRIPT__*/</script>
+</body>
+</html>
