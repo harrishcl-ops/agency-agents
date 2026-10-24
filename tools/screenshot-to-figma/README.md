@@ -68,6 +68,26 @@ Fonts: the design uses the font the model identifies when it is installed in
 Figma, otherwise the closest available (Inter by default). Install the brand's
 fonts in Figma for the closest match; substitutions are listed after converting.
 
+## Posters, banners and photo backgrounds
+
+When text, logos or outlined badges sit on a photo, the plugin:
+
+- **cleans the background**: the overlaid text/logos/outlines (and their
+  shadows) are inpainted out of the photo, so the live layers on top are the
+  only copies and stay freely editable;
+- **extracts logos as transparent PNGs** (colour matting against the cleaned
+  photo), so they can be moved or recoloured without a box of photo around them;
+- **keeps exact typography when the font isn't available**: text whose glyphs
+  still differ after fitting (brand typefaces, wordmarks) is shown as an exact
+  transparent image, with the editable text layer kept hidden underneath in the
+  same group. Install the font and unhide the text layer to switch.
+
+## Import a pre-converted design (.s2f.json)
+
+*Import .s2f file…* renders a design exported as Screen2Figma JSON
+(`{format: "screen2figma", version: 1, name, pixelRatio, tree, images, reference}`)
+without any API calls, e.g. a conversion prepared on another machine.
+
 ## Optional server
 
 Keeps the API key on a server and lets you gate access with a shared token.
@@ -112,6 +132,10 @@ tolerance):
 | Web landing page at 1.5x (Windows scaling) | 96.46% | **99.57%** | 0 | – |
 | Landing page as JPEG (q80) | 96.60% | **99.77%** | 0 | – |
 | Mobile app as JPEG (q60) | 96.84% | **99.20%** | 9 | – |
+| Photo poster with overlaid text/logos (1200², WebP) | 98.06% (live text only) | **99.77%** | 12 | – |
+
+`node test/e2e/plugin-smoke.mjs <name>` loads the built plugin (UI + main
+thread) into the emulator and imports `out/<name>.s2f.json` through the real UI.
 
 The "ceiling" row feeds the exact DOM geometry through the same renderer: the
 remaining fraction of a percent is glyph rasterisation that differs between

@@ -32,6 +32,11 @@ export interface TextStyle {
   lines?: number;
   /** Ink width of each measured line (set by pixel snapping). */
   lineWidths?: number[];
+  /**
+   * The font could not be matched (not installed in Figma): show an exact
+   * image of the text, keeping the live text layer hidden underneath.
+   */
+  raster?: boolean;
 }
 
 export interface Shadow {

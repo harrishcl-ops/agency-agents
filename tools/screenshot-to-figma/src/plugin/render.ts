@@ -218,7 +218,7 @@ export class Renderer {
   private async build(node: DesignNode): Promise<Built> {
     switch (node.type) {
       case "text":
-        return this.buildText(node);
+        return this.images[node.id] ? this.buildRasterText(node) : this.buildText(node);
       case "image":
       case "icon":
         return { layer: await this.buildImage(node), rect: rectOf(node) };
@@ -345,6 +345,38 @@ export class Renderer {
     if (!ink) return { layer: t, rect: { x: node.x, y: node.y, w: t.width, h: t.height } };
     const x = style.align === "center" ? node.x + node.w / 2 - t.width / 2 : style.align === "right" ? node.x + node.w - t.width : node.x - ink.x;
     return { layer: t, rect: { x, y: node.y - ink.y, w: t.width, h: t.height } };
+  }
+
+  /**
+   * Text in a font Figma doesn't have: an exact image of the glyphs, with the
+   * live (substituted-font) text layer kept hidden underneath for editing.
+   */
+  private async buildRasterText(node: DesignNode): Promise<Built> {
+    const scale = node.w / Math.max(1, node.src.w);
+    const pad = 2 * scale;
+    const rect = { x: node.x - pad, y: node.y - pad, w: node.w + 2 * pad, h: node.h + 2 * pad };
+    const group = figma.createFrame();
+    group.name = node.name;
+    group.resize(Math.max(0.01, rect.w), Math.max(0.01, rect.h));
+    group.fills = [];
+    group.clipsContent = false;
+
+    const live = await this.buildText(node);
+    live.layer.name = `${node.name} — editable text (original typeface unavailable; unhide to edit)`;
+    live.layer.visible = false;
+    group.appendChild(live.layer);
+    live.layer.x = live.rect.x - rect.x;
+    live.layer.y = live.rect.y - rect.y;
+
+    const image = figma.createRectangle();
+    image.name = `${node.name} — exact image`;
+    image.resize(Math.max(0.01, rect.w), Math.max(0.01, rect.h));
+    const bytes = this.images[node.id];
+    const imageHash = typeof bytes === "string" ? bytes : figma.createImage(bytes).hash;
+    image.fills = [{ type: "IMAGE", imageHash, scaleMode: "FILL" }];
+    group.appendChild(image);
+    this.stats.images++;
+    return { layer: group, rect };
   }
 
   /**

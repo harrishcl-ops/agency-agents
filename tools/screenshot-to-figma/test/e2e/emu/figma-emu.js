@@ -88,6 +88,7 @@
       this.parent = null;
       this.removed = false;
       this.layoutPositioning = "AUTO";
+      this.visible = true;
     }
     get width() { return this._w; }
     get height() { return this._h; }
@@ -194,7 +195,7 @@
 
   let overlay = null;
   function paint(n, host) {
-    if (n.removed) return;
+    if (n.removed || n.visible === false) return;
     const el = document.createElement("div");
     el.style.cssText = `position:absolute;left:${n.x}px;top:${n.y}px;box-sizing:border-box;`;
     if (n.opacity < 1) el.style.opacity = n.opacity;
@@ -242,11 +243,41 @@
     createRectangle: () => new Shape("RECTANGLE"),
     createEllipse: () => new Shape("ELLIPSE"),
     createText: () => new Text(),
-    createImage: (bytes) => ({ hash: bytes }),
+    createImage: (bytes) => {
+      if (typeof bytes === "string") return { hash: bytes };
+      const hash = `img_${images.size + 1}`;
+      images.set(hash, URL.createObjectURL(new Blob([bytes])));
+      return { hash };
+    },
     createNodeFromSvg: () => { throw new Error("svg not emulated"); },
     listAvailableFontsAsync: async () => Object.keys(STYLE_WEIGHT).map((style) => ({ fontName: { family: "Inter", style } })),
     loadFontAsync: async () => undefined,
   };
+  // Page, viewport, storage and plugin UI plumbing (for whole-plugin tests).
+  const page = { children: [], selection: [] };
+  const origCreate = { frame: window.figma.createFrame, rect: window.figma.createRectangle };
+  window.figma.createFrame = () => { const f = origCreate.frame(); f.parent = null; page.children.push(f); return f; };
+  window.figma.createRectangle = () => { const r = origCreate.rect(); page.children.push(r); return r; };
+  window.figma.currentPage = page;
+  window.figma.viewport = { center: { x: 0, y: 0 }, scrollAndZoomIntoView: () => {} };
+  window.figma.notify = () => {};
+  const store = new Map();
+  window.figma.clientStorage = { getAsync: async (k) => store.get(k), setAsync: async (k, v) => { store.set(k, v); } };
+  window.figma.ui = { onmessage: null, postMessage: (m) => window.__uiFrame?.contentWindow.postMessage({ pluginMessage: m }, "*"), resize: () => {} };
+  window.figma.showUI = (html) => {
+    const f = document.createElement("iframe");
+    f.style.cssText = "position:fixed;right:0;top:0;width:380px;height:680px;border:0";
+    f.srcdoc = html;
+    document.body.appendChild(f);
+    window.__uiFrame = f;
+  };
+  window.addEventListener("message", (e) => {
+    if (e.source === window.__uiFrame?.contentWindow && e.data?.pluginMessage) window.figma.ui.onmessage?.(e.data.pluginMessage);
+  });
+  // Exports return a placeholder PNG (visual checks paint the tree instead).
+  Frame.prototype.exportAsync = async () => Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="), (c) => c.charCodeAt(0));
+  Object.defineProperty(Node.prototype, "locked", { value: false, writable: true });
+
   window.__emu = {
     registerImage: (hash, dataUrl) => images.set(hash, dataUrl),
     layoutAndPaint(root) {

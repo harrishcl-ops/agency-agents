@@ -59,6 +59,15 @@ describe("planLayout", () => {
     expect(planLayout(parent, children, "row", 1.5)).toBeNull();
   });
 
+  it("treats a full-bleed background with floating content as free layout", () => {
+    const parent = { x: 0, y: 0, w: 1200, h: 1200 };
+    const children = [
+      { x: 0, y: 0, w: 1200, h: 1200 },
+      { x: 240, y: 120, w: 140, h: 60 },
+    ];
+    expect(planLayout(parent, children, "column")).toBeNull();
+  });
+
   it("keeps overlapping badges absolute", () => {
     const children = [
       { x: 0, y: 0, w: 24, h: 24 },

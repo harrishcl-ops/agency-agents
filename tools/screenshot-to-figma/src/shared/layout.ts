@@ -174,6 +174,10 @@ export function planLayout(parent: Rect, children: Rect[], hint: LayoutHint, max
   const absolute = findOverlays(children);
   const flowIdx = children.map((_, i) => i).filter((i) => !absolute[i]);
   if (flowIdx.length === 0) return null;
+  // A full-bleed background with content floating on it is a free
+  // composition (posters, hero banners), not a stack.
+  const covers = (r: Rect) => r.w * r.h >= parent.w * parent.h * 0.9;
+  if (absolute.some(Boolean) && flowIdx.some((i) => covers(children[i]))) return null;
   const tolerance = maxError ?? Math.max(3, 0.01 * Math.max(parent.w, parent.h));
 
   const directions: Direction[] = hint === "column" ? ["VERTICAL", "HORIZONTAL"] : ["HORIZONTAL", "VERTICAL"];

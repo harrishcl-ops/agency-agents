@@ -9,7 +9,8 @@ import { hexToRgba, refineColors, type Pixels } from "../../src/shared/color";
 import { diffImages } from "../../src/shared/diff";
 import { inkBox, snapToPixels } from "../../src/shared/snap";
 import { buildTree, sanitizeAnalysis } from "../../src/shared/tree";
-import type { DesignNode, Rect } from "../../src/shared/types";
+import { bitmapSources, markUnmatchedFonts } from "../../src/shared/pipeline";
+import type { Rect } from "../../src/shared/types";
 
 const out = join(process.cwd(), "test/e2e/out");
 const readPng = (path: string): Pixels => {
@@ -39,27 +40,41 @@ if (cmd === "prepare") {
   const raw = JSON.parse(readFileSync(join(out, `${name}.model.json`), "utf8"));
   let analysis = sanitizeAnalysis(raw, px.width, px.height);
   if (arg !== "--no-snap") analysis = snapToPixels(analysis, px);
+  if (process.env.MARK_FROM) {
+    const marked = markUnmatchedFonts(analysis, px, readPng(process.env.MARK_FROM));
+    console.log(`marked ${marked} text layer(s) as missing-font images: ${analysis.nodes.filter((n) => n.text?.raster).map((n) => n.name).join(", ")}`);
+  }
   const tree = buildTree(analysis, px.width, px.height, raw.pixelRatio);
   refineColors(tree, px);
 
   const images: Record<string, string> = {};
-  const walk = (list: DesignNode[]) => {
-    for (const n of list) {
-      if (n.type === "image" || n.type === "icon") {
-        const c = crop(px, n.src);
-        // Icons stay PNG (sharp edges); photos travel as high-quality JPEG to fit tool limits.
-        if (n.type === "icon") {
-          const png = new PNG({ width: c.width, height: c.height });
-          png.data = Buffer.from(c.data);
-          images[n.id] = PNG.sync.write(png).toString("base64");
-        } else {
-          images[n.id] = Buffer.from(jpeg.encode({ data: c.data, width: c.width, height: c.height }, 92).data).toString("base64");
-        }
-      }
-      walk(n.children);
+  for (const [id, source] of bitmapSources(tree, px, "image")) {
+    const c = crop(source.px, source.region);
+    let transparent = false;
+    for (let i = 3; i < c.data.length; i += 4) if (c.data[i] < 255) { transparent = true; break; }
+    // Transparent or small bitmaps stay PNG; large opaque photos travel as JPEG.
+    if (transparent || c.width * c.height < 40000 || process.env.S2F) {
+      const png = new PNG({ width: c.width, height: c.height });
+      png.data = Buffer.from(c.data);
+      images[id] = PNG.sync.write(png).toString("base64");
+    } else {
+      images[id] = Buffer.from(jpeg.encode({ data: c.data, width: c.width, height: c.height }, 92).data).toString("base64");
     }
-  };
-  walk(tree.children);
+    if (process.env.DUMP) writePng(join(out, `${name}.bitmap-${id}.png`), c);
+  }
+  if (process.env.S2F) {
+    const s2f = {
+      format: "screen2figma",
+      version: 1,
+      name: tree.name,
+      pixelRatio: raw.pixelRatio,
+      tree,
+      images,
+      reference: readFileSync(join(out, `${name}.png`)).toString("base64"),
+    };
+    writeFileSync(join(out, `${name}.s2f.json`), JSON.stringify(s2f));
+    console.log(`wrote ${name}.s2f.json`);
+  }
   const suffix = arg === "--no-snap" ? ".nosnap" : "";
   writeFileSync(join(out, `${name}${suffix}.payload.json`), JSON.stringify({ tree, images, pixelRatio: raw.pixelRatio }));
   const sizes = Object.entries(images).map(([k, v]) => `${k}:${(v.length / 1024).toFixed(0)}k`);
@@ -76,11 +91,16 @@ if (cmd === "prepare") {
   const rows: string[] = [];
   for (const n of analysis.nodes) {
     if (n.type !== "text") continue;
+    const box = { x: n.x - 2, y: n.y - 2, w: n.w + 4, h: n.h + 4 };
+    const dd = diffImages(original, rendered, box);
+    const cells = Math.max(1, Math.round((box.w / 12) * (box.h / 12)));
+    rows.push(`CELLS ${n.text!.content.slice(0, 20).padEnd(20)} badCells ${dd.badCells}/${cells} = ${((dd.badCells / cells) * 100).toFixed(1)}%  h ${n.h.toFixed(0)}`);
     const a = inkBox(original, n, bgOf(n), full, 48, true);
     const b = inkBox(rendered, n, bgOf(n), full, 48, true);
     if (!a || !b) continue;
     const d = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(1);
-    rows.push(`${n.text!.content.slice(0, 24).padEnd(24)} dx ${d(b.box.x - a.box.x)} dy ${d(b.box.y - a.box.y)} dw ${d(b.box.w - a.box.w)} dh ${d(b.box.h - a.box.h)} lines ${a.lines}/${b.lines}`);
+    const m = diffImages(original, rendered, { x: a.box.x - 2, y: a.box.y - 2, w: a.box.w + 4, h: a.box.h + 4 }).mismatch;
+    rows.push(`${n.text!.content.slice(0, 24).padEnd(24)} mismatch ${(m * 100).toFixed(1).padStart(5)}% dx ${d(b.box.x - a.box.x)} dy ${d(b.box.y - a.box.y)} dw ${d(b.box.w - a.box.w)} dh ${d(b.box.h - a.box.h)} lines ${a.lines}/${b.lines}`);
   }
   console.log(rows.join("\n"));
 } else if (cmd === "score") {

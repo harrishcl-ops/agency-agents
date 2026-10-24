@@ -50,6 +50,8 @@ const el = {
   file: $<HTMLInputElement>("file"),
   useSelection: $<HTMLButtonElement>("useSelection"),
   clear: $<HTMLButtonElement>("clear"),
+  importS2f: $<HTMLButtonElement>("importS2f"),
+  s2fFile: $<HTMLInputElement>("s2fFile"),
   quality: $<HTMLSelectElement>("quality"),
   platform: $<HTMLSelectElement>("platform"),
   pixelRatio: $<HTMLSelectElement>("pixelRatio"),
@@ -291,7 +293,7 @@ async function convert(): Promise<void> {
   const host: Host = {
     pixels,
     encode: encodeForModel,
-    crop: (region) => cropPng(pixels, region),
+    crop: (px, region) => cropPng(px, region),
     analyze,
     correct,
     async render(tree: DesignTree, images) {
@@ -371,6 +373,67 @@ async function convert(): Promise<void> {
 }
 
 el.convert.addEventListener("click", () => void convert());
+
+// ---------- import a pre-converted design (.s2f.json) ----------
+
+interface S2fFile {
+  format: "screen2figma";
+  version: 1;
+  name: string;
+  pixelRatio: number;
+  tree: DesignTree;
+  /** Node id -> base64 PNG/JPEG. */
+  images: Record<string, string>;
+  /** Optional original screenshot (base64 PNG/JPEG) to place beside the design. */
+  reference?: string;
+  options?: { autoLayout?: boolean; layoutTolerance?: number };
+}
+
+const fromBase64 = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+async function importS2f(file: File): Promise<void> {
+  if (running) return;
+  running = true;
+  updateConvert();
+  try {
+    setStatus("Reading design file…", false, 0.2);
+    const doc = JSON.parse(await file.text()) as S2fFile;
+    if (doc.format !== "screen2figma" || !doc.tree) throw new Error("This isn't a Screen2Figma (.s2f.json) file.");
+    const images: Record<string, Uint8Array> = {};
+    for (const [id, b64] of Object.entries(doc.images ?? {})) images[id] = fromBase64(b64);
+    setStatus("Building Figma layers…", false, 0.5);
+    const id = ++renderId;
+    const done = new Promise<{ png: Uint8Array; stats: RenderStats }>((resolve, reject) => pendingRenders.set(id, { resolve, reject }));
+    post({
+      type: "render",
+      id,
+      tree: doc.tree,
+      images,
+      pixelRatio: doc.pixelRatio || 1,
+      options: {
+        autoLayout: doc.options?.autoLayout ?? true,
+        iconMode: "image",
+        layoutTolerance: doc.options?.layoutTolerance ?? 1 / (doc.pixelRatio || 1),
+        fitText: true,
+      },
+    });
+    const { stats } = await done;
+    post({ type: "finish", reference: doc.reference && settings.addReference ? fromBase64(doc.reference) : null, name: doc.name || doc.tree.name });
+    setStatus(`Imported "${doc.name || doc.tree.name}": ${stats.layers} layers, ${stats.autoLayoutFrames} auto-layout frames, ${stats.images} images.`, false, 1);
+  } catch (err) {
+    setStatus(err instanceof Error ? err.message : String(err), true);
+  } finally {
+    running = false;
+    updateConvert();
+  }
+}
+
+el.importS2f.addEventListener("click", () => el.s2fFile.click());
+el.s2fFile.addEventListener("change", () => {
+  const f = el.s2fFile.files?.[0];
+  if (f) void importS2f(f);
+  el.s2fFile.value = "";
+});
 el.cancel.addEventListener("click", () => {
   cancelled = true;
   setStatus("Cancelling after the current step…");

@@ -8,6 +8,7 @@
 import { AnalysisError, type AnalyzeRequest, type Correction, type CorrectionRequest } from "./analyze";
 import { refineColors, type Pixels } from "./color";
 import { diffImages } from "./diff";
+import { inpaint, matte, overlayMask, planCleanup } from "./inpaint";
 import { snapToPixels } from "./snap";
 import { detectPixelRatio, planSlices, splitInTwo } from "./split";
 import { buildTree, mergeParts, repairParents, sanitizeNode, scaleNodes, subtreeIds } from "./tree";
@@ -30,8 +31,8 @@ export interface Host {
   pixels: Pixels;
   /** Encode `region` of `px` scaled by `scale` for the model (alpha flattened onto white). */
   encode(px: Pixels, region: Rect, scale: number): Promise<ModelImage>;
-  /** PNG bytes of `region` of the original (keeps transparency). */
-  crop(region: Rect): Promise<Uint8Array>;
+  /** PNG bytes of `region` of `px` (keeps transparency). */
+  crop(px: Pixels, region: Rect): Promise<Uint8Array>;
   analyze(request: AnalyzeRequest, onProgress?: (nodes: number) => void): Promise<Analysis>;
   correct(request: CorrectionRequest): Promise<Correction>;
   /** Render in Figma (replacing the previous result) and return the export at source resolution. */
@@ -196,17 +197,9 @@ export class Pipeline {
     const tree = buildTree(analysis, this.px.width, this.px.height, pixelRatio);
     refineColors(tree, this.px);
     const images: Record<string, Uint8Array> = {};
-    const bitmapNodes: DesignNode[] = [];
-    const walk = (list: DesignNode[]) => {
-      for (const n of list) {
-        if (n.type === "image" || (n.type === "icon" && !(this.opts.iconMode === "vector" && n.svg))) bitmapNodes.push(n);
-        walk(n.children);
-      }
-    };
-    walk(tree.children);
-    for (const n of bitmapNodes) {
+    for (const [id, source] of bitmapSources(tree, this.px, this.opts.iconMode)) {
       this.check();
-      images[n.id] = await this.host.crop(n.src);
+      images[id] = await this.host.crop(source.px, source.region);
     }
     return { tree, images };
   }
@@ -357,7 +350,68 @@ export class Pipeline {
       built = best.built;
     }
 
+    // Missing fonts: show exact images of text that still differs, live text kept hidden.
+    const marked = markUnmatchedFonts(analysis, this.px, rendered);
+    if (marked > 0) {
+      host.status(`Keeping ${marked} text layer(s) in a missing font as exact images…`);
+      built = await this.buildRenderable(analysis, pixelRatio);
+      rendered = await host.render(built.tree, built.images);
+      if (opts.quality === "pixel-perfect") history.push(diffImages(this.px, rendered).mismatch);
+    }
+
     host.status("Done", 1);
     return { analysis, tree: built.tree, pixelRatio, mismatchHistory: history };
   }
+}
+
+/**
+ * Where each image/icon layer's bitmap comes from: the original screenshot,
+ * the cleaned background (overlaid text/icons/outlines inpainted away), or a
+ * transparent matte for icons drawn over photos.
+ */
+export function bitmapSources(tree: DesignTree, px: Pixels, iconMode: ConvertOptions["iconMode"]): Map<string, { px: Pixels; region: Rect }> {
+  const plan = planCleanup(tree, px);
+  const clean = plan.overlays.length > 0 ? inpaint(px, overlayMask(px, plan.overlays)) : px;
+  const out = new Map<string, { px: Pixels; region: Rect }>();
+  const walk = (list: DesignNode[]) => {
+    for (const n of list) {
+      if (n.type === "text" && n.text?.raster) {
+        const pad = 2;
+        const region = { x: n.src.x - pad, y: n.src.y - pad, w: n.src.w + 2 * pad, h: n.src.h + 2 * pad };
+        const m = matte(px, clean, region, hexToRgbTuple(n.text.color));
+        out.set(n.id, m ? { px: m, region: { x: 0, y: 0, w: m.width, h: m.height } } : { px, region });
+      }
+      if (n.type === "image" || (n.type === "icon" && !(iconMode === "vector" && n.svg))) {
+        const ink = plan.icons.get(n.id);
+        const m = ink ? matte(px, clean, n.src, ink) : null;
+        if (m) out.set(n.id, { px: m, region: { x: 0, y: 0, w: m.width, h: m.height } });
+        else out.set(n.id, { px: plan.images.has(n.id) ? clean : px, region: n.src });
+      }
+      walk(n.children);
+    }
+  };
+  walk(tree.children);
+  return out;
+}
+
+const hexToRgbTuple = (hex: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+
+/**
+ * Text whose glyphs still differ in whole blocks after fitting is set in a
+ * font Figma doesn't have (brand typefaces, wordmarks). Mark it to be shown as
+ * an exact image with the live text kept underneath. Returns how many.
+ */
+export function markUnmatchedFonts(analysis: Analysis, original: Pixels, rendered: Pixels): number {
+  let marked = 0;
+  for (const n of analysis.nodes) {
+    if (n.type !== "text" || !n.text || n.text.raster) continue;
+    const box = { x: n.x - 2, y: n.y - 2, w: n.w + 4, h: n.h + 4 };
+    const d = diffImages(original, rendered, box);
+    const cells = Math.max(1, (box.w / 12) * (box.h / 12));
+    if (d.badCells >= 6 && d.badCells / cells >= 0.08) {
+      n.text = { ...n.text, raster: true };
+      marked++;
+    }
+  }
+  return marked;
 }
