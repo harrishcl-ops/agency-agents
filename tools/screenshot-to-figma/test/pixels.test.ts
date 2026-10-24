@@ -61,8 +61,22 @@ describe("snapping", () => {
     const px = canvas(300, 100);
     fillRect(px, { x: 50, y: 40, w: 60, h: 12 }, [0, 0, 0]); // the text
     fillRect(px, { x: 150, y: 40, w: 40, h: 12 }, [0, 0, 0]); // a neighbour
-    const box = inkBox(px, { x: 47, y: 38, w: 66, h: 16 }, [255, 255, 255], { x: 0, y: 0, w: 300, h: 100 });
-    expect(box).toEqual({ x: 50, y: 40, w: 60, h: 12 });
+    const ink = inkBox(px, { x: 47, y: 38, w: 66, h: 16 }, [255, 255, 255], { x: 0, y: 0, w: 300, h: 100 }, 40, true);
+    expect(ink!.box).toEqual({ x: 50, y: 40, w: 60, h: 12 });
+    expect(ink!.lines).toBe(1);
+  });
+
+  it("ignores a label just below and measures paragraph lines", () => {
+    const px = canvas(300, 200);
+    fillRect(px, { x: 20, y: 20, w: 50, h: 20 }, [0, 0, 0]); // "12k+"
+    fillRect(px, { x: 20, y: 44, w: 90, h: 10 }, [90, 90, 90]); // "Teams onboard"
+    const stat = inkBox(px, { x: 18, y: 18, w: 56, h: 30 }, [255, 255, 255], { x: 0, y: 0, w: 300, h: 200 }, 40, true)!;
+    expect(stat.box).toEqual({ x: 20, y: 20, w: 50, h: 20 });
+    for (let i = 0; i < 3; i++) fillRect(px, { x: 20, y: 100 + i * 24, w: 200 - i * 30, h: 14 }, [0, 0, 0]);
+    const para = inkBox(px, { x: 16, y: 97, w: 210, h: 66 }, [255, 255, 255], { x: 0, y: 0, w: 300, h: 200 }, 40, true)!;
+    expect(para.lines).toBe(3);
+    expect(para.pitch).toBe(24);
+    expect(para.box).toEqual({ x: 20, y: 100, w: 200, h: 62 });
   });
 
   it("keeps the model box when the measurement looks wrong", () => {

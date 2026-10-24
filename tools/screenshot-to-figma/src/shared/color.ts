@@ -136,9 +136,14 @@ function inset(rect: Rect, by: number): Rect {
  * solid fills of containers/shapes and text ink. Mutates the tree.
  */
 export function refineColors(tree: DesignTree, px: Pixels): void {
+  // Page background: measure only where enough of the page is uncovered by
+  // top-level elements; slivers between jittered boxes are not representative.
   const full: Rect = { x: 0, y: 0, w: px.width, h: px.height };
-  const rootBg = dominantColor(px, full, tree.children.map((c) => c.src));
-  if (rootBg && rootBg.share > 0.5) tree.background = rootBg.hex;
+  const covered = tree.children.reduce((sum, c) => sum + c.src.w * c.src.h, 0);
+  if (covered < full.w * full.h * 0.9) {
+    const rootBg = dominantColor(px, full, tree.children.map((c) => c.src));
+    if (rootBg && rootBg.share > 0.5) tree.background = rootBg.hex;
+  }
 
   const visit = (node: DesignNode, parentBg: RGB) => {
     let bg = parentBg;

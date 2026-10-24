@@ -306,7 +306,8 @@ async function convert(): Promise<void> {
         options: {
           autoLayout: settings.autoLayout,
           iconMode: settings.iconMode,
-          layoutTolerance: settings.quality === "pixel-perfect" ? 1.5 : 3,
+          // In design units: ~1 screenshot pixel for pixel-perfect, ~3 for fast.
+          layoutTolerance: (settings.quality === "pixel-perfect" ? 1 : 3) / pixelRatioUsed,
           fitText: true,
         },
       });

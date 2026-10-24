@@ -28,6 +28,8 @@ export interface TextStyle {
   align: TextAlign;
   italic: boolean;
   decoration: TextDecoration;
+  /** Number of lines measured in the screenshot (set by pixel snapping). */
+  lines?: number;
 }
 
 export interface Shadow {

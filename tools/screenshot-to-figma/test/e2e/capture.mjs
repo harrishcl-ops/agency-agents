@@ -68,10 +68,11 @@ for (const f of FIXTURES) {
       return { color: parseColor(m[1]), x: +m[2] * dpr, y: +m[3] * dpr, blur: +m[4] * dpr, spread: (+m[5] || 0) * dpr };
     }
     function gradientOf(cs) {
-      const m = cs.backgroundImage.match(/linear-gradient\((\d+)deg,\s*(.+)\)$/);
+      // Chrome omits the default "180deg" from computed gradients.
+      const m = cs.backgroundImage.match(/linear-gradient\((?:(\d+)deg,\s*)?(.+)\)$/);
       if (!m) return null;
       const stops = [...m[2].matchAll(/(rgba?\([^)]+\))\s+([\d.]+)%/g)].map((x) => ({ color: noisyColor(parseColor(x[1])), position: +x[2] / 100 }));
-      return stops.length >= 2 ? { angle: +m[1], stops } : null;
+      return stops.length >= 2 ? { angle: m[1] ? +m[1] : 180, stops } : null;
     }
 
     function walk(el, parent) {

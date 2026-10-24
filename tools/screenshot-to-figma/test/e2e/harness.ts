@@ -7,7 +7,7 @@ import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
 import { refineColors, type Pixels } from "../../src/shared/color";
 import { diffImages } from "../../src/shared/diff";
-import { snapToPixels } from "../../src/shared/snap";
+import { inkBox, snapToPixels } from "../../src/shared/snap";
 import { buildTree, sanitizeAnalysis } from "../../src/shared/tree";
 import type { DesignNode, Rect } from "../../src/shared/types";
 
@@ -64,6 +64,23 @@ if (cmd === "prepare") {
   writeFileSync(join(out, `${name}${suffix}.payload.json`), JSON.stringify({ tree, images, pixelRatio: raw.pixelRatio }));
   const sizes = Object.entries(images).map(([k, v]) => `${k}:${(v.length / 1024).toFixed(0)}k`);
   console.log(`${name}${suffix}: tree ${(JSON.stringify(tree).length / 1024).toFixed(1)}k, images ${sizes.join(" ")}`);
+} else if (cmd === "offsets") {
+  // Per text layer: ink box in the original vs the render (source px).
+  const original = readPng(join(out, `${name}.png`));
+  const rendered = readPng(arg);
+  const raw = JSON.parse(readFileSync(join(out, `${name}.model.json`), "utf8"));
+  const analysis = snapToPixels(sanitizeAnalysis(raw, original.width, original.height), original);
+  const full = { x: 0, y: 0, w: original.width, h: original.height };
+  const rows: string[] = [];
+  for (const n of analysis.nodes) {
+    if (n.type !== "text") continue;
+    const a = inkBox(original, n, [255, 255, 255], full, 48, true);
+    const b = inkBox(rendered, n, [255, 255, 255], full, 48, true);
+    if (!a || !b) continue;
+    const d = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(1);
+    rows.push(`${n.text!.content.slice(0, 24).padEnd(24)} dx ${d(b.box.x - a.box.x)} dy ${d(b.box.y - a.box.y)} dw ${d(b.box.w - a.box.w)} dh ${d(b.box.h - a.box.h)} lines ${a.lines}/${b.lines}`);
+  }
+  console.log(rows.join("\n"));
 } else if (cmd === "score") {
   const original = readPng(join(out, `${name}.png`));
   const rendered = readPng(arg);

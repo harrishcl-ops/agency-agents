@@ -306,9 +306,26 @@ export class Renderer {
       return { layer: t, rect: { x, y, w: t.width, h: t.height } };
     }
 
-    // Multi-line: fixed width (small slack so substituted fonts don't re-wrap).
-    t.resize(Math.max(1, node.w * 1.03 + 2), Math.max(1, node.h));
+    // Multi-line: fixed width just wider than the measured ink so lines break
+    // where they did in the screenshot, then search the font size that gives
+    // the same number of lines and the same ink box.
+    t.resize(Math.max(1, node.w * 1.01 + 2), Math.max(1, node.h));
     t.textAutoResize = "HEIGHT";
+    if (this.options.fitText) {
+      const base = t.fontSize;
+      const lh = style.lineHeight && style.lineHeight > style.fontSize * 0.8 ? style.lineHeight : null;
+      let best = { size: base, score: Infinity };
+      for (let k = -15; k <= 15; k++) {
+        const size = Math.round(base * (1 + k / 100) * 100) / 100;
+        t.fontSize = size;
+        const ink = inkOffset(t);
+        if (!ink) continue;
+        const lines = Math.round(t.height / (lh ?? size * 1.21));
+        const score = (style.lines && lines !== style.lines ? 1000 : 0) + Math.abs(ink.w - node.w) + Math.abs(ink.h - node.h) + Math.abs(k) * 0.01;
+        if (score < best.score) best = { size, score };
+      }
+      t.fontSize = best.size;
+    }
     const ink = inkOffset(t);
     if (!ink) return { layer: t, rect: { x: node.x, y: node.y, w: t.width, h: t.height } };
     const x = style.align === "center" ? node.x + node.w / 2 - t.width / 2 : style.align === "right" ? node.x + node.w - t.width : node.x - ink.x;
