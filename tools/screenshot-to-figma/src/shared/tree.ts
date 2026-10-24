@@ -211,6 +211,7 @@ export function scaleNodes(nodes: FlatNode[], s: number, dx = 0, dy = 0): FlatNo
       fontSize: n.text.fontSize * s,
       lineHeight: sc(n.text.lineHeight),
       letterSpacing: sc(n.text.letterSpacing),
+      lineWidths: n.text.lineWidths?.map((w) => w * s),
     },
   }));
 }

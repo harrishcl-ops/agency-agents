@@ -9,7 +9,8 @@
     "watch": "node build.mjs --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "server": "node dist/server.js"
+    "server": "node dist/server.js",
+    "e2e": "bash test/e2e/run-all.sh"
   },
   "license": "MIT",
   "dependencies": {

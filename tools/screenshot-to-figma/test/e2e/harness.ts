@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import jpeg from "jpeg-js";
 import { PNG } from "pngjs";
-import { refineColors, type Pixels } from "../../src/shared/color";
+import { hexToRgba, refineColors, type Pixels } from "../../src/shared/color";
 import { diffImages } from "../../src/shared/diff";
 import { inkBox, snapToPixels } from "../../src/shared/snap";
 import { buildTree, sanitizeAnalysis } from "../../src/shared/tree";
@@ -71,11 +71,13 @@ if (cmd === "prepare") {
   const raw = JSON.parse(readFileSync(join(out, `${name}.model.json`), "utf8"));
   const analysis = snapToPixels(sanitizeAnalysis(raw, original.width, original.height), original);
   const full = { x: 0, y: 0, w: original.width, h: original.height };
+  const screenBg = hexToRgba(analysis.background);
+  const bgOf = (_n: unknown): [number, number, number] => [screenBg.r * 255, screenBg.g * 255, screenBg.b * 255];
   const rows: string[] = [];
   for (const n of analysis.nodes) {
     if (n.type !== "text") continue;
-    const a = inkBox(original, n, [255, 255, 255], full, 48, true);
-    const b = inkBox(rendered, n, [255, 255, 255], full, 48, true);
+    const a = inkBox(original, n, bgOf(n), full, 48, true);
+    const b = inkBox(rendered, n, bgOf(n), full, 48, true);
     if (!a || !b) continue;
     const d = (v: number) => (v >= 0 ? "+" : "") + v.toFixed(1);
     rows.push(`${n.text!.content.slice(0, 24).padEnd(24)} dx ${d(b.box.x - a.box.x)} dy ${d(b.box.y - a.box.y)} dw ${d(b.box.w - a.box.w)} dh ${d(b.box.h - a.box.h)} lines ${a.lines}/${b.lines}`);

@@ -17,19 +17,21 @@ const FIXTURES = [
   { name: "landing", width: 1440, height: 900, dpr: 1 },
   { name: "mobile", width: 390, height: 844, dpr: 3 },
   { name: "dashboard", width: 1280, height: 800, dpr: 2 },
+  // Windows-style fractional scaling.
+  { name: "landing150", page: "landing", width: 1440, height: 900, dpr: 1.5 },
 ];
 
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
 for (const f of FIXTURES) {
   const page = await browser.newPage({ viewport: { width: f.width, height: f.height }, deviceScaleFactor: f.dpr });
-  await page.goto("file://" + join(here, "fixtures", `${f.name}.html`));
+  await page.goto("file://" + join(here, "fixtures", `${f.page ?? f.name}.html`));
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(200);
-  await page.screenshot({ path: join(out, `${f.name}.png`) });
+  await page.screenshot({ path: join(out, `${f.name}${process.env.NOISE === "0" ? "-ideal" : ""}.png`) });
 
-  const analysis = await page.evaluate(({ dpr, seed }) => {
+  const analysis = await page.evaluate(({ dpr, seed, noise }) => {
     let s = seed >>> 0;
-    const rnd = () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1; // -1..1
+    const rnd = () => noise * (((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1); // -1..1
     const jitter = (v, amount) => v + rnd() * amount;
 
     const parseColor = (c) => {
@@ -163,10 +165,10 @@ for (const f of FIXTURES) {
     }
     walk(document.body, "root");
     return { screenName: document.title || "Screen", background: parseColor(getComputedStyle(document.body).backgroundColor) ?? "#FFFFFF", nodes };
-  }, { dpr: f.dpr, seed: 12345 });
+  }, { dpr: f.dpr, seed: 12345, noise: Number(process.env.NOISE ?? 1) });
 
   analysis.screenName = f.name[0].toUpperCase() + f.name.slice(1);
-  await writeFile(join(out, `${f.name}.model.json`), JSON.stringify({ ...analysis, pixelRatio: f.dpr }, null, 1));
+  await writeFile(join(out, `${f.name}${process.env.NOISE === "0" ? "-ideal" : ""}.model.json`), JSON.stringify({ ...analysis, pixelRatio: f.dpr }, null, 1));
   console.log(`${f.name}: ${analysis.nodes.length} nodes`);
   await page.close();
 }

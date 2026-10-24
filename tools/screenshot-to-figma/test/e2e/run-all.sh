@@ -5,9 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 export CHROMIUM="${CHROMIUM:-/opt/pw-browsers/chromium-1243/chrome-linux64/chrome}"
 node test/e2e/capture.mjs >/dev/null
+node test/e2e/variants.mjs landing 80 >/dev/null
+node test/e2e/variants.mjs mobile 60 >/dev/null
 npx esbuild test/e2e/harness.ts --bundle --platform=node --format=esm --packages=external --outfile=test/e2e/out/harness.mjs --log-level=warning
 npx esbuild src/plugin/harness.ts --bundle --minify --target=es2017 --format=iife --outfile=test/e2e/out/renderer.min.js --log-level=warning
-for n in ${FIXTURES:-landing mobile dashboard}; do
+for n in ${FIXTURES:-landing mobile dashboard landing150 landing-q80 mobile-q60}; do
   node test/e2e/out/harness.mjs prepare "$n" --no-snap >/dev/null
   node test/e2e/out/harness.mjs prepare "$n" >/dev/null
   printf "%-10s before snapping: " "$n"; node test/e2e/emu/run.mjs "$n" .nosnap | tail -1 | sed 's/^[a-z]*: //'

@@ -126,6 +126,11 @@
       this.textAutoResize = "WIDTH_AND_HEIGHT";
       this.fills = [{ type: "SOLID", color: { r: 0, g: 0, b: 0 }, opacity: 1 }];
     }
+    clone() {
+      const c = new Text();
+      for (const k of ["fontName", "characters", "fontSize", "lineHeight", "letterSpacing", "textAlignHorizontal", "textDecoration", "textAutoResize", "fills", "_w", "_h", "x", "y"]) c[k] = this[k];
+      return c;
+    }
     get width() { return this.textAutoResize === "WIDTH_AND_HEIGHT" ? layoutText(this).w : this._w; }
     get height() { return this.textAutoResize === "NONE" ? this._h : layoutText(this).h; }
     get absoluteRenderBounds() {

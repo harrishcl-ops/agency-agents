@@ -289,14 +289,24 @@ export class Renderer {
     if (single) {
       t.textAutoResize = "WIDTH_AND_HEIGHT";
       let ink = inkOffset(t);
-      if (this.options.fitText && ink && ink.w > 0) {
-        const ratio = node.w / ink.w;
-        if (ratio > 0.75 && ratio < 1.33 && Math.abs(ratio - 1) > 0.01) {
-          t.fontSize = Math.round(t.fontSize * ratio * 100) / 100;
-          if (style.lineHeight && style.lineHeight > style.fontSize * 0.8) {
-            t.lineHeight = { unit: "PIXELS", value: style.lineHeight * ratio };
-          }
+      if (this.options.fitText && ink && ink.w > 0 && node.w / ink.w > 0.75 && node.w / ink.w < 1.33) {
+        const lh = style.lineHeight && style.lineHeight > style.fontSize * 0.8 ? style.lineHeight : null;
+        const setSize = (size: number) => {
+          t.fontSize = size;
+          if (lh) t.lineHeight = { unit: "PIXELS", value: (lh * size) / style.fontSize };
           ink = inkOffset(t);
+        };
+        // Glyph width is not exactly proportional to size (bearings, letter
+        // spacing), so iterate to within 0.2%.
+        for (let i = 0; i < 5 && ink && Math.abs(node.w / ink.w - 1) > 0.002; i++) {
+          setSize(Math.round(t.fontSize * (node.w / ink.w) * 100) / 100);
+        }
+        // Prefer a whole or half pixel size when it fits as well.
+        const fitted = t.fontSize;
+        const round = Math.round(fitted * 2) / 2;
+        if (round !== fitted) {
+          setSize(round);
+          if (!ink || Math.abs(ink.w - node.w) > Math.max(0.5, node.w * 0.004)) setSize(fitted);
         }
       }
       if (!ink) return { layer: t, rect: { x: node.x, y: node.y + (node.h - t.height) / 2, w: t.width, h: t.height } };
@@ -311,17 +321,22 @@ export class Renderer {
     // the same number of lines and the same ink box.
     t.resize(Math.max(1, node.w * 1.01 + 2), Math.max(1, node.h));
     t.textAutoResize = "HEIGHT";
-    if (this.options.fitText) {
+    const matched = this.options.fitText && style.lineWidths && style.lineWidths.length >= 2 ? this.matchLineBreaks(t, style) : false;
+    if (this.options.fitText && !matched) {
       const base = t.fontSize;
       const lh = style.lineHeight && style.lineHeight > style.fontSize * 0.8 ? style.lineHeight : null;
+      // Wrapping is discontinuous in size, so scan finely (0.1% steps over
+      // +-15%): only the true size reproduces both the line breaks (widest
+      // line = ink width) and the ink height.
       let best = { size: base, score: Infinity };
-      for (let k = -15; k <= 15; k++) {
-        const size = Math.round(base * (1 + k / 100) * 100) / 100;
+      for (let k = -150; k <= 150; k++) {
+        const size = Math.round(base * (1 + k / 1000) * 100) / 100;
         t.fontSize = size;
         const ink = inkOffset(t);
         if (!ink) continue;
         const lines = Math.round(t.height / (lh ?? size * 1.21));
-        const score = (style.lines && lines !== style.lines ? 1000 : 0) + Math.abs(ink.w - node.w) + Math.abs(ink.h - node.h) + Math.abs(k) * 0.01;
+        const score =
+          (style.lines && lines !== style.lines ? 1000 : 0) + Math.abs(ink.w - node.w) + 2 * Math.abs(ink.h - node.h) + Math.abs(k) * 0.001;
         if (score < best.score) best = { size, score };
       }
       t.fontSize = best.size;
@@ -330,6 +345,70 @@ export class Renderer {
     if (!ink) return { layer: t, rect: { x: node.x, y: node.y, w: t.width, h: t.height } };
     const x = style.align === "center" ? node.x + node.w / 2 - t.width / 2 : style.align === "right" ? node.x + node.w - t.width : node.x - ink.x;
     return { layer: t, rect: { x, y: node.y - ink.y, w: t.width, h: t.height } };
+  }
+
+  /**
+   * Find the font size whose natural line breaks reproduce the per-line ink
+   * widths measured in the screenshot, then size the box to the widest line so
+   * Figma wraps at the same words. Returns false when no size reproduces the
+   * line count (caller falls back to the coarser fit).
+   */
+  private matchLineBreaks(t: TextNode, style: TextStyle): boolean {
+    const targets = style.lineWidths!;
+    const words = style.content.split(/(?<=\s)/);
+    if (words.length < targets.length) return false;
+    const probe = t.clone();
+    probe.textAutoResize = "WIDTH_AND_HEIGHT";
+    const measure = (text: string) => {
+      probe.characters = text.trimEnd() || " ";
+      const ink = inkOffset(probe);
+      return { ink: ink ? ink.w : 0, advance: probe.width };
+    };
+
+    // Split words into lines that best match the target widths at the probe's size.
+    const evaluate = (size: number) => {
+      probe.fontSize = size;
+      let i = 0;
+      let error = 0;
+      let widest = 0;
+      for (let line = 0; line < targets.length; line++) {
+        const remaining = targets.length - line - 1;
+        let text = "";
+        let best: { end: number; m: { ink: number; advance: number } } | null = null;
+        for (let j = i; j < words.length - remaining; j++) {
+          text += words[j];
+          const m = measure(text);
+          if (!best || Math.abs(m.ink - targets[line]) <= Math.abs(best.m.ink - targets[line])) best = { end: j + 1, m };
+          if (line === targets.length - 1) continue; // last line takes everything
+          if (m.ink > targets[line] * 1.02 + 2) break;
+        }
+        if (!best) return null;
+        if (line === targets.length - 1) best = { end: words.length, m: measure(text) };
+        error += Math.abs(best.m.ink - targets[line]);
+        widest = Math.max(widest, best.m.advance);
+        i = best.end;
+      }
+      return i === words.length ? { error, widest } : null;
+    };
+
+    type Fit = { size: number; error: number; widest: number };
+    const state: { best: Fit | null } = { best: null };
+    const consider = (size: number) => {
+      const r = evaluate(size);
+      if (r && (!state.best || r.error < state.best.error)) state.best = { size, ...r };
+    };
+    const base = t.fontSize as number;
+    for (let k = -15; k <= 15; k++) consider(Math.round(base * (1 + k / 100) * 100) / 100);
+    const coarse = state.best as Fit | null;
+    if (coarse) for (let k = -20; k <= 20; k++) consider(Math.round(coarse.size * (1 + k / 2000) * 100) / 100);
+    probe.remove();
+    const found = state.best as Fit | null;
+    if (!found) return false;
+    t.fontSize = found.size;
+    t.resize(found.widest + 0.5, t.height);
+    t.textAutoResize = "HEIGHT";
+    const lh = style.lineHeight && style.lineHeight > style.fontSize * 0.8 ? style.lineHeight : found.size * 1.21;
+    return Math.round(t.height / lh) === targets.length;
   }
 
   private async buildImage(node: DesignNode): Promise<SceneNode> {

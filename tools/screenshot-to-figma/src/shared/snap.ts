@@ -147,6 +147,8 @@ export interface Ink {
   box: Rect;
   /** Text only: number of ink lines and their pitch (null for one line). */
   lines: number;
+  /** Ink width of each line, top to bottom. */
+  lineWidths: number[];
   pitch: number | null;
 }
 
@@ -192,6 +194,24 @@ export function inkBox(px: Pixels, r: Rect, bg: RGB, clip: Rect, threshold = 40,
   const xs = grow(runs(cols), r.x - x0, r.x + r.w - x0, isText ? Math.max(2, inkLine * 0.5) : 1);
   if (!xs) return null;
 
+  // Per-line ink widths (text only): they pin down where lines wrap.
+  const lineWidths: number[] = [];
+  if (isText) {
+    for (const [a, b] of [...lineRuns].sort((p, q) => p[0] - q[0])) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let y = ry0 + a; y < ry0 + b; y++) {
+        for (let x = x0 + xs[0]; x < x0 + xs[1]; x++) {
+          if (isInk(x, y)) {
+            lo = Math.min(lo, x);
+            hi = Math.max(hi, x + 1);
+          }
+        }
+      }
+      lineWidths.push(hi > lo ? hi - lo : 0);
+    }
+  }
+
   let pitch: number | null = null;
   if (isText && lineRuns.length >= 2) {
     const tops = lineRuns.map((l) => l[0]).sort((a, b) => a - b);
@@ -201,6 +221,7 @@ export function inkBox(px: Pixels, r: Rect, bg: RGB, clip: Rect, threshold = 40,
   return {
     box: { x: x0 + xs[0], y: ya, w: xs[1] - xs[0], h: yb - ya },
     lines: lineRuns.length,
+    lineWidths,
     pitch,
   };
 }
@@ -257,7 +278,12 @@ export function snapToPixels(a: Analysis, px: Pixels): Analysis {
     const bg = backgroundOf(n);
     let next: Rect | null = null;
 
-    if (n.type === "frame" || n.type === "rectangle" || n.type === "ellipse" || n.type === "line") {
+    const leafGradient = !!n.gradient && !nodes.some((c) => c.parent === n.id);
+    if (leafGradient) {
+      // Gradient shapes have no single colour to follow: take their ink box.
+      const ink = inkBox(px, before, bg, parentRect(n), 24, false);
+      next = ink ? ink.box : null;
+    } else if (n.type === "frame" || n.type === "rectangle" || n.type === "ellipse" || n.type === "line") {
       // Use the measured colours just inside the box, not the model's estimate.
       const inside: RGB[] = [];
       const candidates = [isOpaqueHex(n.fill) && !n.gradient ? hexRgb(n.fill) : null, isOpaqueHex(n.stroke) ? hexRgb(n.stroke) : null];
@@ -270,7 +296,7 @@ export function snapToPixels(a: Analysis, px: Pixels): Analysis {
       const ink = inkBox(px, before, bg, parentRect(n), n.type === "text" ? 48 : 30, n.type === "text");
       next = ink ? ink.box : null;
       if (ink && n.text && iou(before, ink.box) >= 0.5) {
-        n.text = { ...n.text, lines: ink.lines };
+        n.text = { ...n.text, lines: ink.lines, lineWidths: ink.lineWidths };
         if (ink.pitch && ink.lines >= 2) n.text.lineHeight = ink.pitch;
       }
     }

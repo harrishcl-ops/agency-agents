@@ -30,6 +30,8 @@ export interface TextStyle {
   decoration: TextDecoration;
   /** Number of lines measured in the screenshot (set by pixel snapping). */
   lines?: number;
+  /** Ink width of each measured line (set by pixel snapping). */
+  lineWidths?: number[];
 }
 
 export interface Shadow {
