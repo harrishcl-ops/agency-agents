@@ -9,7 +9,8 @@ import { hexToRgba, refineColors, type Pixels } from "../../src/shared/color";
 import { diffImages } from "../../src/shared/diff";
 import { inkBox, snapToPixels } from "../../src/shared/snap";
 import { buildTree, sanitizeAnalysis } from "../../src/shared/tree";
-import { bitmapSources, markUnmatchedFonts } from "../../src/shared/pipeline";
+import { assetsFor, markUnmatchedFonts } from "../../src/shared/pipeline";
+import type { DesignNode } from "../../src/shared/types";
 import type { Rect } from "../../src/shared/types";
 
 const out = join(process.cwd(), "test/e2e/out");
@@ -48,7 +49,14 @@ if (cmd === "prepare") {
   refineColors(tree, px);
 
   const images: Record<string, string> = {};
-  for (const [id, source] of bitmapSources(tree, px, "image")) {
+  const assets = assetsFor(tree, px, (process.env.ICONS as "vector" | "image") ?? "vector");
+  const setSvg = (list: DesignNode[]) => list.forEach((n) => { const a = assets.get(n.id); n.svg = a?.kind === "vector" ? a.svg : null; setSvg(n.children); });
+  setSvg(tree.children);
+  for (const [id, source] of assets) {
+    if (source.kind === "vector") {
+      if (process.env.DUMP) writeFileSync(join(out, `${name}.vector-${id}.svg`), source.svg);
+      continue;
+    }
     const c = crop(source.px, source.region);
     let transparent = false;
     for (let i = 3; i < c.data.length; i += 4) if (c.data[i] < 255) { transparent = true; break; }

@@ -9,6 +9,7 @@ import { AnalysisError, type AnalyzeRequest, type Correction, type CorrectionReq
 import { refineColors, type Pixels } from "./color";
 import { diffImages } from "./diff";
 import { inpaint, matte, overlayMask, planCleanup } from "./inpaint";
+import { traceMatte } from "./trace";
 import { snapToPixels } from "./snap";
 import { detectPixelRatio, planSlices, splitInTwo } from "./split";
 import { buildTree, mergeParts, repairParents, sanitizeNode, scaleNodes, subtreeIds } from "./tree";
@@ -197,10 +198,20 @@ export class Pipeline {
     const tree = buildTree(analysis, this.px.width, this.px.height, pixelRatio);
     refineColors(tree, this.px);
     const images: Record<string, Uint8Array> = {};
-    for (const [id, source] of bitmapSources(tree, this.px, this.opts.iconMode)) {
-      this.check();
-      images[id] = await this.host.crop(source.px, source.region);
-    }
+    const assets = assetsFor(tree, this.px, this.opts.iconMode);
+    const visit = async (list: DesignNode[]) => {
+      for (const n of list) {
+        const asset = assets.get(n.id);
+        if (asset?.kind === "vector") n.svg = asset.svg;
+        else if (asset) {
+          this.check();
+          n.svg = null;
+          images[n.id] = await this.host.crop(asset.px, asset.region);
+        }
+        await visit(n.children);
+      }
+    };
+    await visit(tree.children);
     return { tree, images };
   }
 
@@ -364,28 +375,39 @@ export class Pipeline {
   }
 }
 
+export type Asset = { kind: "bitmap"; px: Pixels; region: Rect } | { kind: "vector"; svg: string };
+
+const toHex = (c: [number, number, number]) => "#" + c.map((v) => Math.round(v).toString(16).padStart(2, "0")).join("").toUpperCase();
+
 /**
- * Where each image/icon layer's bitmap comes from: the original screenshot,
- * the cleaned background (overlaid text/icons/outlines inpainted away), or a
- * transparent matte for icons drawn over photos.
+ * Best representation for every image-like layer:
+ * - single-colour icons/logos and text in an unavailable font: traced vector
+ *   paths (crisp at any zoom), from a colour matte against the cleaned
+ *   background; only when the matte rebuilds the original;
+ * - everything else (photos, multi-colour art): a bitmap cut from the
+ *   original, or from the cleaned background when text/logos/outlines were
+ *   drawn over it (they live as their own layers).
  */
-export function bitmapSources(tree: DesignTree, px: Pixels, iconMode: ConvertOptions["iconMode"]): Map<string, { px: Pixels; region: Rect }> {
+export function assetsFor(tree: DesignTree, px: Pixels, iconMode: ConvertOptions["iconMode"]): Map<string, Asset> {
   const plan = planCleanup(tree, px);
   const clean = plan.overlays.length > 0 ? inpaint(px, overlayMask(px, plan.overlays)) : px;
-  const out = new Map<string, { px: Pixels; region: Rect }>();
+  const out = new Map<string, Asset>();
+  const vectorOrBitmap = (id: string, region: Rect, ink: [number, number, number]) => {
+    const m = matte(px, clean, region, ink);
+    const traced = m && iconMode === "vector" ? traceMatte(m, toHex(ink)) : null;
+    if (traced) out.set(id, { kind: "vector", svg: traced.svg });
+    else if (m) out.set(id, { kind: "bitmap", px: m, region: { x: 0, y: 0, w: m.width, h: m.height } });
+    else out.set(id, { kind: "bitmap", px, region });
+  };
   const walk = (list: DesignNode[]) => {
     for (const n of list) {
       if (n.type === "text" && n.text?.raster) {
         const pad = 2;
-        const region = { x: n.src.x - pad, y: n.src.y - pad, w: n.src.w + 2 * pad, h: n.src.h + 2 * pad };
-        const m = matte(px, clean, region, hexToRgbTuple(n.text.color));
-        out.set(n.id, m ? { px: m, region: { x: 0, y: 0, w: m.width, h: m.height } } : { px, region });
-      }
-      if (n.type === "image" || (n.type === "icon" && !(iconMode === "vector" && n.svg))) {
-        const ink = plan.icons.get(n.id);
-        const m = ink ? matte(px, clean, n.src, ink) : null;
-        if (m) out.set(n.id, { px: m, region: { x: 0, y: 0, w: m.width, h: m.height } });
-        else out.set(n.id, { px: plan.images.has(n.id) ? clean : px, region: n.src });
+        vectorOrBitmap(n.id, { x: n.src.x - pad, y: n.src.y - pad, w: n.src.w + 2 * pad, h: n.src.h + 2 * pad }, hexToRgbTuple(n.text.color));
+      } else if (n.type === "icon" && plan.icons.has(n.id)) {
+        vectorOrBitmap(n.id, n.src, plan.icons.get(n.id)!);
+      } else if (n.type === "image" || n.type === "icon") {
+        out.set(n.id, { kind: "bitmap", px: plan.images.has(n.id) ? clean : px, region: n.src });
       }
       walk(n.children);
     }

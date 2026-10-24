@@ -68,6 +68,22 @@ Fonts: the design uses the font the model identifies when it is installed in
 Figma, otherwise the closest available (Inter by default). Install the brand's
 fonts in Figma for the closest match; substitutions are listed after converting.
 
+## How each element is represented
+
+Decided automatically from measurements, not guesses:
+
+| Element | Test | Figma result |
+| --- | --- | --- |
+| Text in a font Figma has | fitted render matches the pixels | live text |
+| Text in a font Figma doesn't have (brand type, wordmarks) | still differs block-wise after fitting | **vector outlines** + hidden live text |
+| Single-colour logos, icons, glyphs (any background) | colour matte rebuilds the original | **traced vector paths** (crisp at any zoom) |
+| Photos, textures, multi-colour artwork | matte can't rebuild it | image at full source resolution |
+| Cards, buttons, panels, dividers | measurable edges, solid/gradient fill | frames/shapes, auto layout where exact |
+
+Tracing: coverage matte → 4× upsampled marching squares → simplification
+(0.4 px) → near-axis segments snapped straight → Bézier curves through smooth
+runs, sharp corners kept. On the test logos <0.2% of ink pixels change.
+
 ## Posters, banners and photo backgrounds
 
 When text, logos or outlined badges sit on a photo, the plugin:
@@ -75,11 +91,11 @@ When text, logos or outlined badges sit on a photo, the plugin:
 - **cleans the background**: the overlaid text/logos/outlines (and their
   shadows) are inpainted out of the photo, so the live layers on top are the
   only copies and stay freely editable;
-- **extracts logos as transparent PNGs** (colour matting against the cleaned
-  photo), so they can be moved or recoloured without a box of photo around them;
+- **turns logos into vectors** (colour matting against the cleaned photo, then
+  tracing), so they are crisp at any zoom and can be moved or recoloured;
 - **keeps exact typography when the font isn't available**: text whose glyphs
-  still differ after fitting (brand typefaces, wordmarks) is shown as an exact
-  transparent image, with the editable text layer kept hidden underneath in the
+  still differ after fitting (brand typefaces, wordmarks) is shown as traced
+  vector outlines, with the editable text layer kept hidden underneath in the
   same group. Install the font and unhide the text layer to switch.
 
 ## Import a pre-converted design (.s2f.json)
@@ -132,7 +148,7 @@ tolerance):
 | Web landing page at 1.5x (Windows scaling) | 96.46% | **99.57%** | 0 | – |
 | Landing page as JPEG (q80) | 96.60% | **99.77%** | 0 | – |
 | Mobile app as JPEG (q60) | 96.84% | **99.20%** | 9 | – |
-| Photo poster with overlaid text/logos (1200², WebP) | 98.06% (live text only) | **99.77%** | 12 | – |
+| Photo poster with overlaid text/logos (1200², WebP), logos/wordmark as vectors | 98.06% (live text only) | **99.57%** | 13 | – |
 
 `node test/e2e/plugin-smoke.mjs <name>` loads the built plugin (UI + main
 thread) into the emulator and imports `out/<name>.s2f.json` through the real UI.
@@ -149,8 +165,8 @@ Final behaviour should still be checked in Figma itself.
 
 ## Limitations
 
-- Icons are exact image crops by default; *Vector (AI redraw)* asks Claude for
-  SVGs, which are editable but approximate.
+- Multi-colour icons and illustrations stay images (only single-colour shapes
+  are traced). Choose *Icons: Image* to keep every icon as a bitmap.
 - Text that is part of a photo or illustration stays in the image.
 - Very dense screens take longer: overflowing analyses are split automatically.
 - Screenshots must not exceed ~60 megapixels (larger ones are downscaled).

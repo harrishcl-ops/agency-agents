@@ -37,7 +37,7 @@ const DEFAULTS: Settings = {
   maxRounds: 3,
   platform: "auto",
   pixelRatio: 0,
-  iconMode: "image",
+  iconMode: "vector",
   autoLayout: true,
   addReference: true,
 };
@@ -354,7 +354,7 @@ async function convert(): Promise<void> {
       el.resultDetail.textContent = "";
     }
     if (stats) {
-      el.resultDetail.textContent += `${countNodes(result.tree.children)} layers, ${stats.autoLayoutFrames} auto-layout frames, ${stats.images} images.`;
+      el.resultDetail.textContent += `${countNodes(result.tree.children)} layers, ${stats.autoLayoutFrames} auto-layout frames, ${stats.vectors} vectors, ${stats.images} images.`;
       if (stats.substitutedFonts.length) el.resultDetail.textContent += ` Fonts not installed (substituted): ${stats.substitutedFonts.join(", ")}.`;
     }
     setStatus("Done — the design is selected on the canvas.", false, 1);
@@ -419,7 +419,7 @@ async function importS2f(file: File): Promise<void> {
     });
     const { stats } = await done;
     post({ type: "finish", reference: doc.reference && settings.addReference ? fromBase64(doc.reference) : null, name: doc.name || doc.tree.name });
-    setStatus(`Imported "${doc.name || doc.tree.name}": ${stats.layers} layers, ${stats.autoLayoutFrames} auto-layout frames, ${stats.images} images.`, false, 1);
+    setStatus(`Imported "${doc.name || doc.tree.name}": ${stats.layers} layers, ${stats.autoLayoutFrames} auto-layout frames, ${stats.vectors} vectors, ${stats.images} images.`, false, 1);
   } catch (err) {
     setStatus(err instanceof Error ? err.message : String(err), true);
   } finally {

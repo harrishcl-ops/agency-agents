@@ -234,6 +234,12 @@
     for (const e of n.effects) if (e.type === "DROP_SHADOW") shadows.push(`${e.offset.x}px ${e.offset.y}px ${e.radius}px ${e.spread ?? 0}px ${rgba(e.color, e.color.a)}`);
     if (shadows.length) el.style.boxShadow = shadows.join(",");
     if (n.type === "FRAME" && n.clipsContent) el.style.overflow = "hidden";
+    if (n._svg) {
+      const img = document.createElement("img");
+      img.src = "data:image/svg+xml;base64," + btoa(n._svg);
+      img.style.cssText = "position:absolute;left:0;top:0;width:100%;height:100%;";
+      el.appendChild(img);
+    }
     host.appendChild(el);
     if (n.children) for (const c of n.children) paint(c, el);
   }
@@ -249,7 +255,16 @@
       images.set(hash, URL.createObjectURL(new Blob([bytes])));
       return { hash };
     },
-    createNodeFromSvg: () => { throw new Error("svg not emulated"); },
+    createNodeFromSvg: (svg) => {
+      const f = new Frame();
+      const m = svg.match(/width="([\d.]+)" height="([\d.]+)"/);
+      f._w = m ? +m[1] : 100;
+      f._h = m ? +m[2] : 100;
+      f._svg = svg;
+      f.clipsContent = false;
+      page.children.push(f);
+      return f;
+    },
     listAvailableFontsAsync: async () => Object.keys(STYLE_WEIGHT).map((style) => ({ fontName: { family: "Inter", style } })),
     loadFontAsync: async () => undefined,
   };

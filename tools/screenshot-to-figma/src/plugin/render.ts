@@ -23,6 +23,7 @@ export interface RenderStats {
   layers: number;
   texts: number;
   images: number;
+  vectors: number;
   autoLayoutFrames: number;
   failed: number;
   substitutedFonts: string[];
@@ -114,6 +115,7 @@ export class Renderer {
     layers: 0,
     texts: 0,
     images: 0,
+    vectors: 0,
     autoLayoutFrames: 0,
     failed: 0,
     substitutedFonts: [],
@@ -218,7 +220,7 @@ export class Renderer {
   private async build(node: DesignNode): Promise<Built> {
     switch (node.type) {
       case "text":
-        return this.images[node.id] ? this.buildRasterText(node) : this.buildText(node);
+        return node.text?.raster && (node.svg || this.images[node.id]) ? this.buildRasterText(node) : this.buildText(node);
       case "image":
       case "icon":
         return { layer: await this.buildImage(node), rect: rectOf(node) };
@@ -368,15 +370,38 @@ export class Renderer {
     live.layer.x = live.rect.x - rect.x;
     live.layer.y = live.rect.y - rect.y;
 
-    const image = figma.createRectangle();
-    image.name = `${node.name} — exact image`;
-    image.resize(Math.max(0.01, rect.w), Math.max(0.01, rect.h));
-    const bytes = this.images[node.id];
-    const imageHash = typeof bytes === "string" ? bytes : figma.createImage(bytes).hash;
-    image.fills = [{ type: "IMAGE", imageHash, scaleMode: "FILL" }];
-    group.appendChild(image);
-    this.stats.images++;
+    const vector = node.svg ? this.vectorFromSvg(node.svg, `${node.name} — outlines`, rect.w) : null;
+    if (vector) {
+      group.appendChild(vector);
+      vector.x = 0;
+      vector.y = 0;
+    } else {
+      const image = figma.createRectangle();
+      image.name = `${node.name} — exact image`;
+      image.resize(Math.max(0.01, rect.w), Math.max(0.01, rect.h));
+      const bytes = this.images[node.id];
+      const imageHash = typeof bytes === "string" ? bytes : figma.createImage(bytes).hash;
+      image.fills = [{ type: "IMAGE", imageHash, scaleMode: "FILL" }];
+      group.appendChild(image);
+      this.stats.images++;
+    }
     return { layer: group, rect };
+  }
+
+  /** A traced SVG (in screenshot pixels) as a native vector layer `width` design units wide. */
+  private vectorFromSvg(svg: string, name: string, width: number): FrameNode | null {
+    try {
+      const vector = figma.createNodeFromSvg(svg);
+      vector.name = name;
+      vector.fills = [];
+      vector.clipsContent = false;
+      if (vector.width > 0) vector.rescale(width / vector.width);
+      this.stats.vectors++;
+      return vector;
+    } catch (err) {
+      console.warn(`Screen2Figma: could not import vector for "${name}"`, err);
+      return null;
+    }
   }
 
   /**
@@ -444,20 +469,9 @@ export class Renderer {
   }
 
   private async buildImage(node: DesignNode): Promise<SceneNode> {
-    if (node.type === "icon" && this.options.iconMode === "vector" && node.svg) {
-      try {
-        const vector = figma.createNodeFromSvg(node.svg);
-        vector.name = node.name;
-        if (vector.width > 0 && vector.height > 0) {
-          vector.rescale(Math.min(node.w / vector.width, node.h / vector.height));
-        }
-        vector.resize(Math.max(0.01, node.w), Math.max(0.01, node.h));
-        vector.fills = [];
-        this.stats.images++;
-        return vector;
-      } catch {
-        // Fall back to the cropped bitmap below.
-      }
+    if (node.svg) {
+      const vector = this.vectorFromSvg(node.svg, node.name, node.w);
+      if (vector) return vector;
     }
 
     const shape = isCircle(node) ? figma.createEllipse() : figma.createRectangle();

@@ -20,7 +20,7 @@ Styling
 - fill: solid background hex (#RRGGBB, or #RRGGBBAA when translucent), null when transparent. Use gradient (with null fill) for gradient backgrounds.
 - stroke/strokeWidth for visible borders, radius for corner radius, shadow for a visible drop shadow, opacity only when the whole element is faded.
 - name: short human-readable layer names ("Primary button", "Pricing card", "Nav / Logo").
-- svg: null unless asked for vector icons.
+- svg: always null (icons are vectorised from the pixels).
 - ids are short unique strings.`;
 
 export function buildUserPrompt(opts: {
@@ -50,11 +50,6 @@ export function buildUserPrompt(opts: {
   if (opts.section) {
     lines.push(
       `This image is a crop showing only the "${opts.section.name}" section of a larger screen${opts.section.background ? ` (its background is ${opts.section.background})` : ""}. Do not emit a node for the section itself: describe everything inside it, with top-level elements using parent "root".`,
-    );
-  }
-  if (opts.iconMode === "vector") {
-    lines.push(
-      'For every "icon" node, also set "svg" to a compact, self-contained <svg> (viewBox matching the icon box size, stroke/fill in the icon colour) that redraws the glyph.',
     );
   }
   lines.push("Describe everything in the image.");
@@ -91,7 +86,7 @@ export function buildCorrectionPrompt(opts: {
 }): string {
   return [
     `The region is ${opts.width}x${opts.height} pixels. ${opts.mismatchPercent.toFixed(1)}% of its pixels currently differ.`,
-    opts.iconMode === "vector" ? 'Icons should carry an "svg" redraw.' : 'Keep "svg" null.',
+    'Keep "svg" null.',
     "Current layers in this region:",
     opts.nodesJson,
   ].join("\n");

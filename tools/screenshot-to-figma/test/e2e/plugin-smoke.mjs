@@ -11,7 +11,7 @@ const [name] = process.argv.slice(2);
 const out = "test/e2e/out";
 const doc = JSON.parse(readFileSync(join(out, `${name}.s2f.json`), "utf8"));
 const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
-const page = await browser.newPage({ viewport: { width: Math.max(1600, doc.tree.width + 400), height: Math.max(900, doc.tree.height) }, deviceScaleFactor: doc.pixelRatio });
+const page = await browser.newPage({ viewport: { width: Math.max(1600, doc.tree.width + 400), height: Math.max(900, doc.tree.height) }, deviceScaleFactor: Number(process.env.ZOOM ?? doc.pixelRatio) });
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 await page.goto("file://" + join(process.cwd(), "test/e2e/emu/stage.html"));
@@ -40,6 +40,10 @@ const result = await page.evaluate(() => {
 });
 await page.waitForTimeout(300);
 const file = join(out, `${name}.plugin.png`);
+if (process.env.CLIP) {
+  const [x, y, w, h] = process.env.CLIP.split(",").map(Number);
+  await page.screenshot({ path: join(out, `${name}.zoom.png`), clip: { x, y, width: w, height: h } });
+}
 await page.locator("#stage > div").first().screenshot({ path: file });
 await browser.close();
 console.log(`status: ${status}`);

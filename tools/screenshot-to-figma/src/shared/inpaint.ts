@@ -187,7 +187,29 @@ export function inpaint(px: Pixels, mask: Uint8Array): Pixels {
     }
     levels.push(lv);
   }
-  // Coarse to fine: unknown pixels take the bilinear value of the level above.
+  // Gauss-Seidel smoothing of a level's unknown pixels (known ones fixed).
+  const smooth = (lv: Level, iterations: number) => {
+    const holes: number[] = [];
+    for (let i = 0; i < lv.w * lv.h; i++) if (!lv.known[i]) holes.push(i);
+    for (let it = 0; it < iterations; it++) {
+      for (const i of holes) {
+        const x = i % lv.w;
+        const y = (i - x) / lv.w;
+        let n = 0;
+        const sum = [0, 0, 0];
+        for (const j of [x > 0 ? i - 1 : -1, x < lv.w - 1 ? i + 1 : -1, y > 0 ? i - lv.w : -1, y < lv.h - 1 ? i + lv.w : -1]) {
+          if (j < 0) continue;
+          n++;
+          for (let k = 0; k < 3; k++) sum[k] += lv.c[j * 3 + k];
+        }
+        for (let k = 0; k < 3; k++) lv.c[i * 3 + k] = sum[k] / n;
+      }
+    }
+  };
+
+  // Coarse to fine: unknown pixels start from the bilinear value of the level
+  // above and are smoothed at every scale (multigrid-style harmonic fill), so
+  // large holes come out as smooth gradients instead of blocks.
   for (let l = levels.length - 2; l >= 0; l--) {
     const lv = levels[l];
     const up = levels[l + 1];
@@ -210,6 +232,7 @@ export function inpaint(px: Pixels, mask: Uint8Array): Pixels {
         }
       }
     }
+    if (l > 0) smooth(lv, 12);
   }
   // Diffusion on the masked pixels for seamless edges.
   const holes: number[] = [];
@@ -273,6 +296,22 @@ export function matte(original: Pixels, clean: Pixels, r: Rect, ink: RGB): Pixel
   }
   // Too little contrast against the background for a trustworthy matte.
   if (weak > w * h * 0.3) return null;
+  // Single-colour test: ink composited over the clean background must rebuild
+  // the original. Multi-colour artwork fails and stays a bitmap.
+  let bad = 0;
+  let inked = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const o = (y * w + x) * 4;
+      const a = data[o + 3] / 255;
+      const p = at(original, x0 + x, y0 + y);
+      const b = at(clean, x0 + x, y0 + y);
+      const rebuilt: RGB = [ink[0] * a + b[0] * (1 - a), ink[1] * a + b[1] * (1 - a), ink[2] * a + b[2] * (1 - a)];
+      if (a > 0.05 || dist(p, b) > 40) inked++;
+      if (dist(rebuilt, p) > 48) bad++;
+    }
+  }
+  if (inked > 0 && bad / inked > 0.08) return null;
   return { data, width: w, height: h };
 }
 
@@ -314,6 +353,15 @@ export function planCleanup(tree: DesignTree, px: Pixels): CleanPlan {
     // Text shown as an image needs the clean background behind it for matting.
     if (n.type === "text" && n.text?.raster) plan.overlays.push({ kind: "ink", rect: n.src, ink: hexRgb(n.text.color) });
     const below = images.filter((img) => img.order < p.order && !p.ancestors.has(img.node.id) && intersects(img.node.src, n.src));
+    // Icons are matted (for vector tracing) on any background.
+    if (n.type === "icon" && below.length === 0) {
+      const ink = estimateInk(px, n.src);
+      if (ink) {
+        plan.overlays.push({ kind: "ink", rect: n.src, ink });
+        plan.icons.set(n.id, ink);
+      }
+      continue;
+    }
     if (below.length === 0) continue;
     if (n.type === "text" && n.text) {
       if (!n.text.raster) plan.overlays.push({ kind: "ink", rect: n.src, ink: hexRgb(n.text.color) });
