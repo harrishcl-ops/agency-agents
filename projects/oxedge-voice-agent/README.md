@@ -61,6 +61,8 @@ npm run setup
 ```
 This creates the assistant(s), saves their IDs in `.vapi-state.json`, and connects your phone number to inbound calls. Re-run it whenever you change the prompt, knowledge file or settings: it updates Layla in place.
 
+**Demo mode:** if `PUBLIC_URL` is empty, setup only needs `VAPI_API_KEY`. Layla then talks and captures leads, which show in the Vapi dashboard under Call Logs, but she takes a preferred time instead of booking one. Use the dashboard's "Talk to Assistant" button to try her in the browser before you deploy anything or buy a number.
+
 ### 5. Test call
 ```bash
 npm run call -- +9715XXXXXXXX --force                  # Layla calls your phone

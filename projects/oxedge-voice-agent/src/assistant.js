@@ -21,7 +21,15 @@ const TOOL_MESSAGES = {
   ar: { check: 'لحظة، خلني أشيك على المواعيد.', book: 'ثواني، أحجز لك الموعد.' },
 };
 
-export function systemPrompt({ language, knowledge, transferEnabled }) {
+const BOOKING_STEPS = {
+  live: `3. Offer a free 30-minute discovery call with the OxEdge team. Use check_availability, offer at most two of the returned times, and when they pick one, call book_discovery_call with that slot's exact start value.
+4. Confirm the booked time, tell them they'll get a WhatsApp recap, thank them and end the call with the endCall tool.`,
+  // Demo mode has no webhook server, so Layla takes a preferred time instead of booking one.
+  demo: `3. Offer a free 30-minute discovery call with the OxEdge team. Ask which weekday and time of day suits them, and say the team will confirm the exact time on WhatsApp.
+4. Repeat their preference back, thank them and end the call with the endCall tool.`,
+};
+
+export function systemPrompt({ language, knowledge, transferEnabled, demo = false }) {
   return `You are Layla, the AI phone receptionist for OxEdge, a web agency and custom software company in Dubai. You are on a live phone call; everything you write is spoken aloud.
 
 Today is {{"now" | date: "%A %d %B %Y, %I:%M %p", "Asia/Dubai"}} in Dubai.
@@ -34,8 +42,7 @@ Speak ${SPOKEN_LANGUAGE[language] ?? SPOKEN_LANGUAGE.en}
 # Your goals, in order
 1. Understand what the caller needs (website, e-commerce, mobile app, custom software, AI automation, or something else).
 2. Collect, one question at a time: their name, company, what they need, rough budget range, timeline, and whether WhatsApp on this number is fine for follow-up. Email is optional.
-3. Offer a free 30-minute discovery call with the OxEdge team. Use check_availability, offer at most two of the returned times, and when they pick one, call book_discovery_call with that slot's exact start value.
-4. Confirm the booked time, tell them they'll get a WhatsApp recap, thank them and end the call with the endCall tool.
+${demo ? BOOKING_STEPS.demo : BOOKING_STEPS.live}
 
 # How to speak
 - One or two short sentences per turn, under 35 words. Ask one question at a time.
@@ -76,6 +83,7 @@ export const LEAD_SCHEMA = {
     email: { type: 'string', description: 'Email address if given' },
     need: { type: 'string', description: 'What they want built, in a short phrase' },
     budget: { type: 'string', description: 'Budget range as stated, e.g. "AED 30-50k"' },
+    preferred_time: { type: 'string', description: 'When they would like the discovery call, if they said' },
     timeline: { type: 'string', description: 'When they want it, as stated' },
     whatsapp_ok: { type: 'boolean', description: 'False only if the caller declined WhatsApp follow-up' },
     wants_human: { type: 'boolean', description: 'True if they asked to speak to a person' },
@@ -87,8 +95,11 @@ export function buildAssistant({ config, language, knowledge }) {
   const { agent, publicUrl, webhookSecret } = config;
   const transferEnabled = Boolean(agent.transferNumber);
   const msgs = TOOL_MESSAGES[language] ?? TOOL_MESSAGES.en;
+  // Without PUBLIC_URL there is no webhook server yet: Layla can still talk and Vapi still
+  // extracts the lead, but she can't check the calendar or book.
+  const demo = !publicUrl;
 
-  const tools = [
+  const bookingTools = [
     {
       type: 'function',
       messages: [{ type: 'request-start', content: msgs.check }],
@@ -122,8 +133,8 @@ export function buildAssistant({ config, language, knowledge }) {
         },
       },
     },
-    { type: 'endCall' },
   ];
+  const tools = [...(demo ? [] : bookingTools), { type: 'endCall' }];
 
   if (transferEnabled) {
     tools.push({
@@ -153,7 +164,7 @@ export function buildAssistant({ config, language, knowledge }) {
       model: agent.llmModel,
       temperature: 0.4,
       maxTokens: 250,
-      messages: [{ role: 'system', content: systemPrompt({ language, knowledge, transferEnabled }) }],
+      messages: [{ role: 'system', content: systemPrompt({ language, knowledge, transferEnabled, demo }) }],
       tools,
     },
     voice: {
@@ -162,12 +173,14 @@ export function buildAssistant({ config, language, knowledge }) {
       voiceId: agent.voiceIds[language] ?? agent.voiceIds.en,
       ...(agent.voiceModel === 'eleven_flash_v2_5' ? { language } : {}),
     },
-    server: {
-      url: `${publicUrl}/vapi/webhook`,
-      timeoutSeconds: 20,
-      headers: { Authorization: `Bearer ${webhookSecret}` },
-    },
-    serverMessages: ['tool-calls', 'end-of-call-report'],
+    ...(demo ? {} : {
+      server: {
+        url: `${publicUrl}/vapi/webhook`,
+        timeoutSeconds: 20,
+        headers: { Authorization: `Bearer ${webhookSecret}` },
+      },
+      serverMessages: ['tool-calls', 'end-of-call-report'],
+    }),
     endCallMessage: language === 'ar' ? 'شكراً لك، مع السلامة.' : 'Thanks for calling OxEdge. Goodbye!',
     maxDurationSeconds: 600,
     analysisPlan: {

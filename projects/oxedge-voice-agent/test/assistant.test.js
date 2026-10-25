@@ -56,3 +56,14 @@ test('outbound overrides switch the prompt into follow-up mode', () => {
   assert.match(o.variableValues.lead_context, /clinic website/);
   assert.match(o.firstMessage, /calling from Dubai/);
 });
+
+test('without PUBLIC_URL Layla runs in demo mode: no webhook, no booking tools', () => {
+  const config = testConfig({ publicUrl: '' });
+  const a = buildAssistant({ config, language: 'en', knowledge });
+  assert.equal(a.server, undefined);
+  assert.equal(a.serverMessages, undefined);
+  assert.deepEqual(a.model.tools.map((t) => t.type), ['endCall']);
+  assert.doesNotMatch(a.model.messages[0].content, /check_availability/);
+  assert.match(a.model.messages[0].content, /confirm the exact time on WhatsApp/);
+});
+

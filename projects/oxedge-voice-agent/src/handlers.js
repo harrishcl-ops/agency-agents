@@ -145,6 +145,7 @@ export function createHandlers({ config, calendar, crm, messenger, store, now = 
       need: data.need ?? null,
       budget: data.budget ?? null,
       timeline: data.timeline ?? null,
+      preferredTime: data.preferred_time ?? null,
       leadQuality: data.lead_quality ?? null,
       wantsHuman: data.wants_human ?? false,
       whatsappOk: data.whatsapp_ok ?? null,

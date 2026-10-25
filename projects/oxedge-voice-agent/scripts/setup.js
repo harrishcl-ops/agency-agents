@@ -18,9 +18,15 @@ for (const event of ['uncaughtException', 'unhandledRejection']) {
 
 loadDotEnv();
 const config = getConfig();
-requireConfig(config, ['vapi.apiKey', 'publicUrl', 'webhookSecret']);
-if (!config.publicUrl.startsWith('https://')) {
-  throw new Error('PUBLIC_URL must be the https:// address where the webhook server is reachable (use ngrok for local testing).');
+requireConfig(config, ['vapi.apiKey']);
+if (!config.publicUrl) {
+  console.log('PUBLIC_URL is not set, so Layla is set up in demo mode: she talks and captures leads in the Vapi');
+  console.log('dashboard, but can\'t check the calendar or book. Deploy the server, set PUBLIC_URL and re-run setup.\n');
+} else {
+  requireConfig(config, ['webhookSecret']);
+  if (!config.publicUrl.startsWith('https://')) {
+    throw new Error('PUBLIC_URL must be the https:// address where the webhook server is reachable (use ngrok for local testing).');
+  }
 }
 
 const knowledge = readFileSync(config.agent.knowledgeFile, 'utf8');
